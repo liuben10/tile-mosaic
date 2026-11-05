@@ -36,8 +36,9 @@ services:
     environment:
       NODE_ENV: development
       AUTH_MODE: dev
-      # local admin panel: log in as "admin" (dev mode ids are "dev:<username>")
-      ADMIN_SUBS: dev:admin
+      # local admin panel: log in as "admin", or list your own usernames in .env as
+      # ADMIN_SUBS=dev:admin,dev:<username> (dev mode account ids are "dev:<username>")
+      ADMIN_SUBS: ${ADMIN_SUBS:-dev:admin}
       DATABASE_URL: postgres://tilemosaic:tilemosaic@db:5432/tilemosaic
       AWS_REGION: us-east-2
       AWS_ACCESS_KEY_ID: test

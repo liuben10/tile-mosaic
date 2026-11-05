@@ -8,3 +8,6 @@ dist/
 *.tfstate
 *.tfstate.*
 *.tfvars
+
+# local settings for docker compose (not committed)
+.env
