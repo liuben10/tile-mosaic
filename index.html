@@ -1,0 +1,753 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Tile Mosaic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: control rail of three steps on the left, a large zoomable viewing well on the right; stacks on phones. */
+:root {
+  --bg: #eceef4;
+  --panel: #fbfbfd;
+  --ink: #1a1d2b;
+  --muted: #5b6176;
+  --line: #d3d7e3;
+  --accent: #3346d3;
+  --accent-ink: #ffffff;
+  --well: #dde0ea;
+  --check: #d0d4df;
+  --f-display: "Silkscreen", ui-monospace, "Courier New", monospace;
+  --f-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11131b; --panel: #191c27; --ink: #e6e8f1; --muted: #979db2; --line: #2b3042;
+    --accent: #8d9cff; --accent-ink: #0f1230; --well: #0b0d13; --check: #161924; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11131b; --panel: #191c27; --ink: #e6e8f1; --muted: #979db2; --line: #2b3042;
+  --accent: #8d9cff; --accent-ink: #0f1230; --well: #0b0d13; --check: #161924; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body); }
+.wrap {
+  max-width: 1360px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header.top .wrap { padding-block: 28px 18px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 24px; }
+h1 { font: 400 clamp(26px, 4vw, 38px)/1 var(--f-display); margin: 0; letter-spacing: 0.02em; }
+header p { margin: 0; color: var(--muted); max-width: 62ch; text-wrap: pretty; }
+
+.app { display: grid; grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); gap: 20px; padding-block: 0 40px; align-items: start; }
+@media (max-width: 860px) { .app { grid-template-columns: minmax(0, 1fr); } }
+
+.panel { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.step { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.step h2 { margin: 0; font: 400 15px/1 var(--f-display); letter-spacing: 0.04em; display: flex; align-items: center; gap: 10px; }
+.step h2 .n { display: inline-grid; place-items: center; width: 22px; height: 22px; background: var(--ink); color: var(--panel); font-size: 12px; }
+
+.drop { border: 1.5px dashed var(--line); border-radius: 4px; padding: 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--muted); font-size: 13px; transition: border-color .15s, background .15s; }
+.drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.drop .lead { flex-basis: 100%; }
+
+.btn { font: 500 13px/1 var(--f-body); border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 9px 12px; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn:focus-visible, input:focus-visible, select:focus-visible, label.btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.meta { margin: 0; font: 12px/1.45 var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.meta b { color: var(--ink); font-weight: 500; }
+.tag { font: 500 10px/1 var(--f-mono); text-transform: uppercase; letter-spacing: .08em; padding: 3px 6px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); }
+
+.strip-label { font: 11px/1 var(--f-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+#paletteStrip { width: 100%; height: 14px; display: block; image-rendering: pixelated; border-radius: 2px; }
+.thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(26px, 1fr)); gap: 3px; }
+.thumbs canvas { width: 100%; aspect-ratio: 1; image-rendering: pixelated; background: var(--well); border-radius: 2px; }
+
+.target-row { display: flex; gap: 12px; align-items: center; min-width: 0; }
+#targetPreview { width: 96px; height: 72px; object-fit: contain; background: var(--well); border-radius: 3px; flex: none; }
+
+.field { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }
+.field label { font-size: 13px; font-weight: 500; }
+.field output, .field .val { font: 12px var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.field input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+.field select { grid-column: 1 / -1; font: 13px var(--f-body); padding: 7px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); }
+.field .help { grid-column: 1 / -1; font-size: 12px; color: var(--muted); margin: 0; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.check input { accent-color: var(--accent); }
+.bgrow { display: flex; gap: 8px; align-items: center; grid-column: 1 / -1; }
+.bgrow select { flex: 1; }
+input[type=color] { width: 38px; height: 32px; padding: 2px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); }
+
+.summary { border-top: 1px solid var(--line); padding-top: 12px; }
+
+.stage { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.toolbar .zoom { display: flex; gap: 6px; align-items: center; flex: 1 1 260px; min-width: 0; }
+.toolbar .zoom input { flex: 1; min-width: 60px; accent-color: var(--accent); }
+.toolbar .zoom .val { font: 12px var(--f-mono); color: var(--muted); width: 5ch; text-align: right; font-variant-numeric: tabular-nums; }
+
+.viewer {
+  position: relative; height: min(76vh, 780px); min-height: 320px; overflow: auto; border-radius: 6px; border: 1px solid var(--line);
+  background-color: var(--well);
+  background-image: linear-gradient(45deg, var(--check) 25%, transparent 25%, transparent 75%, var(--check) 75%), linear-gradient(45deg, var(--check) 25%, transparent 25%, transparent 75%, var(--check) 75%);
+  background-size: 16px 16px; background-position: 0 0, 8px 8px;
+  cursor: grab; touch-action: pan-x pan-y; overscroll-behavior: contain;
+}
+.viewer.dragging { cursor: grabbing; }
+.viewer .inner { width: max-content; height: max-content; min-width: 100%; min-height: 100%; display: grid; place-items: center; }
+.viewer canvas { display: block; box-shadow: 0 2px 18px rgb(0 0 0 / .18); }
+@media (max-width: 860px) { .viewer { height: 62vh; } }
+
+.progress { position: sticky; left: 0; top: 0; height: 0; z-index: 2; }
+.progress .bar { height: 3px; background: var(--accent); width: 0; transition: width .1s linear; }
+.status { font: 12px var(--f-mono); color: var(--muted); min-height: 1.4em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.status.err { color: #c2363a; }
+.hint { margin: 0; font-size: 12px; color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <h1>Tile Mosaic</h1>
+    <p>Rebuild a picture out of a folder of small images. Every cell of the target is replaced by the tile whose average color is closest. It all runs in your browser; nothing is uploaded anywhere.</p>
+  </div>
+</header>
+
+<main class="wrap app">
+  <aside class="panel">
+    <section class="step" id="stepTiles">
+      <h2><span class="n">1</span>Tiles <span class="tag" id="tileTag">Sample</span></h2>
+      <div class="drop" id="tileDrop">
+        <span class="lead">Drop a folder of PNGs here, or pick one.</span>
+        <label class="btn primary" for="tileDir">Choose folder</label>
+        <label class="btn" for="tileFiles">Choose files</label>
+        <input type="file" id="tileDir" webkitdirectory directory multiple hidden>
+        <input type="file" id="tileFiles" multiple accept="image/*" hidden>
+      </div>
+      <p class="meta" id="tileMeta">Loading sample tiles…</p>
+      <span class="strip-label">Colors available, by hue</span>
+      <canvas id="paletteStrip" width="320" height="1"></canvas>
+      <div class="thumbs" id="tileThumbs"></div>
+    </section>
+
+    <section class="step" id="stepTarget">
+      <h2><span class="n">2</span>Target image <span class="tag" id="targetTag">Sample</span></h2>
+      <div class="drop" id="targetDrop">
+        <div class="target-row">
+          <img id="targetPreview" alt="Target image preview">
+          <div style="display:flex;flex-direction:column;gap:8px;min-width:0">
+            <span>Drop an image here, or</span>
+            <label class="btn primary" for="targetFile" style="align-self:flex-start">Choose image</label>
+          </div>
+        </div>
+        <input type="file" id="targetFile" accept="image/*" hidden>
+      </div>
+      <p class="meta" id="targetMeta"></p>
+    </section>
+
+    <section class="step" id="stepSettings">
+      <h2><span class="n">3</span>Settings</h2>
+      <div class="field">
+        <label for="cols">Tiles across</label><output id="colsOut"></output>
+        <input type="range" id="cols" min="16" max="320" step="1" value="80">
+      </div>
+      <div class="field">
+        <label for="tileSize">Tile size in output</label><output id="tileSizeOut"></output>
+        <input type="range" id="tileSize" min="8" max="128" step="1" value="32">
+      </div>
+      <div class="field">
+        <label for="detail">Match detail</label>
+        <select id="detail">
+          <option value="1">1×1: average color only</option>
+          <option value="2" selected>2×2: match light and dark halves</option>
+          <option value="3">3×3: finest, slowest</option>
+        </select>
+        <p class="help">Compares a grid of colors inside each cell, so tiles follow edges and shading.</p>
+      </div>
+      <div class="field">
+        <label for="metric">Color matching</label>
+        <select id="metric">
+          <option value="lab">Perceptual (CIELAB distance)</option>
+          <option value="rgb">Plain RGB distance</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="bgMode">Behind transparent pixels</label>
+        <div class="bgrow">
+          <select id="bgMode">
+            <option value="auto" selected>Best fit for this image</option>
+            <option value="custom">Solid color</option>
+            <option value="cell">Target's color for that cell</option>
+          </select>
+          <input type="color" id="bgColor" value="#ffffff" aria-label="Background color">
+        </div>
+        <p class="help" id="bgHelp">Transparent pixels are counted as this color when matching.</p>
+      </div>
+      <div class="field">
+        <label for="variety">Variety</label><output id="varietyOut"></output>
+        <input type="range" id="variety" min="1" max="8" step="1" value="1">
+        <p class="help">1 always uses the closest tile. Higher picks at random among the N closest.</p>
+      </div>
+      <div class="field">
+        <label for="tint">Tint toward target</label><output id="tintOut"></output>
+        <input type="range" id="tint" min="0" max="70" step="1" value="0">
+      </div>
+      <label class="check"><input type="checkbox" id="avoidRepeats" checked> Avoid repeating a tile next to itself</label>
+      <label class="check"><input type="checkbox" id="pixelArt" checked> Sharp pixel-art scaling</label>
+      <p class="meta summary" id="summary"></p>
+    </section>
+  </aside>
+
+  <section class="stage">
+    <div class="toolbar">
+      <div class="zoom">
+        <button class="btn" id="zoomFit" type="button">Fit</button>
+        <button class="btn" id="zoom1" type="button">1:1</button>
+        <input type="range" id="zoom" min="0" max="1000" value="0" aria-label="Zoom">
+        <span class="val" id="zoomVal">—</span>
+      </div>
+      <button class="btn primary" id="save" type="button" disabled>Save PNG</button>
+    </div>
+    <div class="viewer" id="viewer">
+      <div class="progress"><div class="bar" id="bar"></div></div>
+      <div class="inner"><canvas id="out" width="1" height="1"></canvas></div>
+    </div>
+    <div class="status" id="status"></div>
+    <p class="hint">Scroll or use the slider to zoom. Drag to pan. Double-click to zoom in on a spot.</p>
+  </section>
+</main>
+
+<script>
+(() => {
+const $ = (id) => document.getElementById(id);
+const ART_MAX = 256;            // tile art is kept at native size, up to this
+const DESC = 48, BLOCKS = 6;    // colour descriptor: 6×6 blocks measured on a 48×48 render
+const MAX_SIDE = 16384, MAX_AREA = 120e6;
+const S = {
+  tiles: [], tileSource: "sample",
+  target: null, targetW: 0, targetH: 0, targetName: "sample",
+  out: $("out"), build: 0, scale: 1, built: false,
+};
+// yield to the browser; the timer keeps work going in background tabs, where rAF is paused
+const nextFrame = () => new Promise((r) => { requestAnimationFrame(() => r()); setTimeout(r, 50); });
+
+function mulberry32(a) {
+  return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+
+/* ---------- color ---------- */
+function toLin(v) { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }
+function labF(t) { return t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116; }
+function rgbToLab(r, g, b) {
+  const R = toLin(r), G = toLin(g), B = toLin(b);
+  const x = (0.4124 * R + 0.3576 * G + 0.1805 * B) / 0.95047;
+  const y = 0.2126 * R + 0.7152 * G + 0.0722 * B;
+  const z = (0.0193 * R + 0.1192 * G + 0.9505 * B) / 1.08883;
+  const fx = labF(x), fy = labF(y), fz = labF(z);
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+}
+function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function hueOf(r, g, b) {
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  if (d < 12) return 400 + (r + g + b) / 3; // greys sort to the end, dark to light
+  let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return (h * 60 + 360) % 360;
+}
+
+/* ---------- tiles ---------- */
+function canvasOf(w, h) { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; }
+
+function makeTile(name, src, sw, sh) {
+  const k = Math.min(1, ART_MAX / Math.max(sw, sh));
+  const w = Math.max(1, Math.round(sw * k)), h = Math.max(1, Math.round(sh * k));
+  const raw = canvasOf(w, h), rx = raw.getContext("2d", { willReadFrequently: true });
+  rx.imageSmoothingQuality = "high"; rx.drawImage(src, 0, 0, w, h);
+  const d = rx.getImageData(0, 0, w, h).data;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1, transparent = false;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const a = d[(y * w + x) * 4 + 3];
+    if (a < 255) transparent = true;
+    if (a > 16) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  }
+  if (x1 < 0) return null;
+
+  // sprites are trimmed to their visible pixels and centred in a square; opaque photos are centre-cropped
+  let sx, sy, cw, ch, side;
+  if (transparent) { sx = x0; sy = y0; cw = x1 - x0 + 1; ch = y1 - y0 + 1; side = Math.max(cw, ch); }
+  else { side = Math.min(w, h); sx = (w - side) >> 1; sy = (h - side) >> 1; cw = ch = side; }
+  const art = canvasOf(side, side);
+  art.getContext("2d").drawImage(raw, sx, sy, cw, ch, (side - cw) >> 1, (side - ch) >> 1, cw, ch);
+
+  // premultiplied mean colour + coverage of each block; lets us composite over any background later
+  const dc = canvasOf(DESC, DESC), dx = dc.getContext("2d", { willReadFrequently: true });
+  dx.imageSmoothingQuality = "high"; dx.drawImage(art, 0, 0, DESC, DESC);
+  const p = dx.getImageData(0, 0, DESC, DESC).data, B = DESC / BLOCKS;
+  const desc = new Float32Array(BLOCKS * BLOCKS * 4);
+  for (let y = 0; y < DESC; y++) for (let x = 0; x < DESC; x++) {
+    const i = (y * DESC + x) * 4, a = p[i + 3] / 255, o = (((y / B) | 0) * BLOCKS + ((x / B) | 0)) * 4;
+    desc[o] += p[i] * a; desc[o + 1] += p[i + 1] * a; desc[o + 2] += p[i + 2] * a; desc[o + 3] += a;
+  }
+  for (let i = 0; i < desc.length; i++) desc[i] /= B * B;
+  const m = BLOCKS * BLOCKS; let pr = 0, pg = 0, pb = 0, cov = 0;
+  for (let o = 0; o < desc.length; o += 4) { pr += desc[o]; pg += desc[o + 1]; pb += desc[o + 2]; cov += desc[o + 3]; }
+  return { name, art, desc, pr: pr / m, pg: pg / m, pb: pb / m, cov: cov / m };
+}
+
+// average the 6×6 blocks down to a g×g grid of [pr, pg, pb, cov]
+function tileCells(t, g) {
+  const out = new Float32Array(g * g * 4), span = BLOCKS / g;
+  for (let by = 0; by < BLOCKS; by++) for (let bx = 0; bx < BLOCKS; bx++) {
+    const s = (((by / span) | 0) * g + ((bx / span) | 0)) * 4, o = (by * BLOCKS + bx) * 4;
+    for (let c = 0; c < 4; c++) out[s + c] += t.desc[o + c] / (span * span);
+  }
+  return out;
+}
+
+function isImage(f) { return /^image\//.test(f.type) || /\.(png|jpe?g|gif|webp|bmp)$/i.test(f.name); }
+
+async function loadTileFiles(files) {
+  const imgs = files.filter(isImage);
+  if (!imgs.length) { $("tileMeta").textContent = "No images found there. Pick a folder that contains PNG, JPG, GIF or WebP files."; return; }
+  const tiles = []; let failed = 0, empty = 0;
+  for (let i = 0; i < imgs.length; i++) {
+    try {
+      const bmp = await createImageBitmap(imgs[i]);
+      const t = makeTile(imgs[i].webkitRelativePath || imgs[i].name, bmp, bmp.width, bmp.height);
+      bmp.close();
+      if (!t || t.cov < 0.03) empty++; else tiles.push(t);
+    } catch { failed++; }
+    if (i % 40 === 0) { $("tileMeta").textContent = `Reading tiles… ${i + 1} / ${imgs.length}`; await nextFrame(); }
+  }
+  if (!tiles.length) { $("tileMeta").textContent = "None of those images could be used as tiles (they were empty or unreadable)."; return; }
+  S.tiles = tiles; S.tileSource = "yours";
+  $("tileTag").textContent = "Yours";
+  const notes = [];
+  if (empty) notes.push(`${empty} blank skipped`);
+  if (failed) notes.push(`${failed} unreadable`);
+  showTiles(notes.join(", "));
+  schedule();
+}
+
+function showTiles(note) {
+  const n = S.tiles.length;
+  $("tileMeta").innerHTML = `<b>${n.toLocaleString()}</b> tile${n === 1 ? "" : "s"} ready` + (note ? ` · ${note}` : "") + (S.tileSource === "sample" ? " · generated sprites" : "");
+  drawPalette();
+  const box = $("tileThumbs"); box.textContent = "";
+  const step = Math.max(1, Math.floor(n / 40));
+  for (let i = 0; i < n && box.childElementCount < 40; i += step) {
+    const c = document.createElement("canvas"); c.width = c.height = 32;
+    const x = c.getContext("2d"), art = S.tiles[i].art;
+    x.imageSmoothingEnabled = art.width > 32; x.imageSmoothingQuality = "high";
+    x.drawImage(art, 0, 0, 32, 32);
+    c.title = S.tiles[i].name; box.appendChild(c);
+  }
+}
+
+function drawPalette() {
+  const cv = $("paletteStrip"), x = cv.getContext("2d");
+  const bg = hexToRgb($("bgColor").value), cellMode = $("bgMode").value === "cell";
+  const cols = S.tiles.map((t) => tileColor(t, bg, cellMode)).sort((a, b) => hueOf(...a) - hueOf(...b));
+  cv.width = Math.max(1, Math.min(cols.length, 320)); cv.height = 1;
+  for (let i = 0; i < cv.width; i++) {
+    const c = cols[Math.floor(i * cols.length / cv.width)];
+    x.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`; x.fillRect(i, 0, 1, 1);
+  }
+}
+
+function tileColor(t, bg, cellMode) {
+  if (cellMode) return [t.pr / t.cov, t.pg / t.cov, t.pb / t.cov]; // opaque pixels only
+  const k = 1 - t.cov;
+  return [t.pr + bg[0] * k, t.pg + bg[1] * k, t.pb + bg[2] * k];
+}
+
+/* ---------- sample data ---------- */
+function makeSampleTiles() {
+  const rand = mulberry32(7), tiles = [], N = 12;
+  for (let s = 0; s < 180; s++) {
+    const c = document.createElement("canvas"); c.width = c.height = N;
+    const x = c.getContext("2d");
+    const grey = s % 9 === 0;
+    const h = rand() * 360, sat = grey ? 0 : 35 + rand() * 60, l = 14 + rand() * 72;
+    const body = `hsl(${h} ${sat}% ${l}%)`, shade = `hsl(${h} ${sat}% ${Math.max(5, l - 14)}%)`;
+    const accent = `hsl(${(h + 150 + rand() * 60) % 360} ${sat}% ${Math.min(92, l + 22)}%)`;
+    const outline = `hsl(${h} ${sat * 0.6}% ${Math.max(6, l - 34)}%)`;
+    const on = [];
+    for (let y = 0; y < N; y++) for (let i = 0; i < N / 2; i++) {
+      const dx = (N / 2 - 0.5 - i) / (N / 2), dy = (y - N / 2 + 0.5) / (N / 2);
+      on[y * N + i] = on[y * N + (N - 1 - i)] = rand() < 1.15 - Math.hypot(dx * 0.8, dy);
+    }
+    const at = (i, y) => i >= 0 && y >= 0 && i < N && y < N && on[y * N + i];
+    for (let y = 0; y < N; y++) for (let i = 0; i < N; i++) {
+      if (at(i, y)) { x.fillStyle = y > N * 0.66 ? shade : (rand() < 0.12 ? accent : body); x.fillRect(i, y, 1, 1); }
+      else if (at(i - 1, y) || at(i + 1, y) || at(i, y - 1) || at(i, y + 1)) { x.fillStyle = outline; x.fillRect(i, y, 1, 1); }
+    }
+    const ey = 3 + Math.floor(rand() * 3), ex = 2 + Math.floor(rand() * 2);
+    if (at(ex, ey)) { x.fillStyle = l > 50 ? "#111" : "#fff"; x.fillRect(ex, ey, 1, 1); x.fillRect(N - 1 - ex, ey, 1, 1); }
+    tiles.push(makeTile(`sprite-${String(s + 1).padStart(3, "0")}.png`, c, N, N));
+  }
+  return tiles;
+}
+
+function makeSampleTarget() {
+  const W = 640, H = 480, c = document.createElement("canvas"); c.width = W; c.height = H;
+  const x = c.getContext("2d"), rand = mulberry32(42), horizon = H * 0.64;
+  let g = x.createLinearGradient(0, 0, 0, horizon);
+  g.addColorStop(0, "#14204f"); g.addColorStop(0.45, "#5b3f86"); g.addColorStop(0.8, "#e0716a"); g.addColorStop(1, "#ffc46b");
+  x.fillStyle = g; x.fillRect(0, 0, W, horizon);
+  g = x.createRadialGradient(430, horizon - 40, 10, 430, horizon - 40, 170);
+  g.addColorStop(0, "rgba(255,236,170,1)"); g.addColorStop(0.28, "rgba(255,214,120,.95)"); g.addColorStop(0.3, "rgba(255,190,110,.45)"); g.addColorStop(1, "rgba(255,160,100,0)");
+  x.fillStyle = g; x.fillRect(0, 0, W, horizon);
+  const ridge = (base, amp, color, seed) => {
+    const r = mulberry32(seed); x.fillStyle = color; x.beginPath(); x.moveTo(0, horizon);
+    let y = base; for (let px = 0; px <= W; px += 16) { y += (r() - 0.5) * amp; y = Math.min(horizon - 4, Math.max(base - amp * 2, y)); x.lineTo(px, y); }
+    x.lineTo(W, horizon); x.closePath(); x.fill();
+  };
+  ridge(horizon - 90, 34, "#6b4a7e", 3); ridge(horizon - 55, 30, "#3e2c5c", 5); ridge(horizon - 24, 18, "#22193a", 9);
+  g = x.createLinearGradient(0, horizon, 0, H); g.addColorStop(0, "#3d3a6e"); g.addColorStop(1, "#0d1230");
+  x.fillStyle = g; x.fillRect(0, horizon, W, H - horizon);
+  for (let i = 0; i < 26; i++) {
+    const y = horizon + 6 + i * 6.5, w = 120 - i * 3.5 + rand() * 30;
+    x.fillStyle = `rgba(255,${200 - i * 3},${120 - i * 2},${0.75 - i * 0.025})`; x.fillRect(430 - w / 2 + (rand() - 0.5) * 20, y, w, 3);
+  }
+  x.fillStyle = "#090c1f"; x.beginPath(); x.moveTo(0, H); x.lineTo(0, H - 70);
+  x.quadraticCurveTo(120, H - 120, 250, H - 50); x.quadraticCurveTo(320, H - 20, 360, H); x.closePath(); x.fill();
+  return c;
+}
+
+/* ---------- target ---------- */
+async function loadTarget(file) {
+  try {
+    const bmp = await createImageBitmap(file);
+    S.target = bmp; S.targetW = bmp.width; S.targetH = bmp.height; S.targetName = file.name;
+    $("targetTag").textContent = "Yours";
+    showTarget(URL.createObjectURL(file));
+    schedule();
+  } catch { setStatus(`Couldn't read ${file.name} as an image. Try a PNG, JPG or WebP.`, true); }
+}
+function showTarget(src) {
+  const img = $("targetPreview"); const old = img.src;
+  img.src = src; if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+  $("targetMeta").innerHTML = `<b>${escapeHtml(S.targetName)}</b> · ${S.targetW} × ${S.targetH} px`;
+}
+function escapeHtml(s) { return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+function sampleTarget(cols, rows, bgHex) {
+  // halve repeatedly so a big reduction averages pixels instead of skipping them
+  let cur = S.target, w = S.targetW, h = S.targetH;
+  while (w >= cols * 4 && h >= rows * 4) {
+    const nw = Math.ceil(w / 2), nh = Math.ceil(h / 2), c = document.createElement("canvas");
+    c.width = nw; c.height = nh; const x = c.getContext("2d"); x.imageSmoothingQuality = "high";
+    x.drawImage(cur, 0, 0, w, h, 0, 0, nw, nh); cur = c; w = nw; h = nh;
+  }
+  const c = document.createElement("canvas"); c.width = cols; c.height = rows;
+  const x = c.getContext("2d", { willReadFrequently: true });
+  x.fillStyle = bgHex; x.fillRect(0, 0, cols, rows);
+  x.imageSmoothingQuality = "high"; x.drawImage(cur, 0, 0, w, h, 0, 0, cols, rows);
+  return x.getImageData(0, 0, cols, rows).data;
+}
+
+/* ---------- matching ---------- */
+// Each tile becomes a g×g grid of colours. In "cell" mode a tile's transparent areas show the
+// target's own colour, so each sub-cell is weighted by how much of it the sprite actually covers.
+function buildIndex(bg, cellMode, metric, g) {
+  const n = S.tiles.length, m = g * g, P = new Float32Array(n * m * 3), W = new Float32Array(n * m);
+  S.tiles.forEach((t, i) => {
+    const c = tileCells(t, g);
+    let wsum = 0;
+    for (let s = 0; s < m; s++) wsum += c[s * 4 + 3];
+    for (let s = 0; s < m; s++) {
+      const pr = c[s * 4], pg = c[s * 4 + 1], pb = c[s * 4 + 2], cov = c[s * 4 + 3];
+      let rgb;
+      if (cellMode) { rgb = cov > 1e-3 ? [pr / cov, pg / cov, pb / cov] : [0, 0, 0]; W[i * m + s] = cov / wsum; }
+      else { const k = 1 - cov; rgb = [pr + bg[0] * k, pg + bg[1] * k, pb + bg[2] * k]; W[i * m + s] = 1 / m; }
+      const v = metric === "lab" ? rgbToLab(...rgb) : rgb, o = (i * m + s) * 3;
+      P[o] = v[0]; P[o + 1] = v[1]; P[o + 2] = v[2];
+    }
+  });
+  return { n, m, P, W, cache: new Map() };
+}
+// k closest tiles to the cell's colour grid T, by weighted mean squared distance
+function nearest(idx, T, k, key) {
+  if (key !== undefined) { const hit = idx.cache.get(key); if (hit) return hit; }
+  const { n, m, P, W } = idx, best = [], dist = [];
+  for (let i = 0; i < n; i++) {
+    const lim = best.length < k ? Infinity : dist[best.length - 1];
+    let d = 0;
+    for (let s = 0; s < m && d < lim; s++) {
+      const o = (i * m + s) * 3, t = s * 3;
+      const a = P[o] - T[t], b = P[o + 1] - T[t + 1], c = P[o + 2] - T[t + 2];
+      d += W[i * m + s] * (a * a + b * b + c * c);
+    }
+    if (d >= lim) continue;
+    let j = Math.min(best.length, k - 1);
+    while (j > 0 && dist[j - 1] > d) { best[j] = best[j - 1]; dist[j] = dist[j - 1]; j--; }
+    best[j] = i; dist[j] = d;
+  }
+  const res = { best, dist };
+  if (key !== undefined) idx.cache.set(key, res);
+  return res;
+}
+
+// Quick 1×1 trial on a small grid: which background colour gives the lowest average error?
+function bestBackground(metric) {
+  const cols = 48, rows = Math.max(1, Math.round(cols * S.targetH / S.targetW)), n = cols * rows;
+  const px = sampleTarget(cols, rows, "#808080"), cells = [];
+  let mr = 0, mg = 0, mb = 0;
+  for (let i = 0; i < n * 4; i += 4) {
+    mr += px[i]; mg += px[i + 1]; mb += px[i + 2];
+    cells.push(metric === "lab" ? rgbToLab(px[i], px[i + 1], px[i + 2]) : [px[i], px[i + 1], px[i + 2]]);
+  }
+  const cands = [[255, 255, 255], [0, 0, 0], [128, 128, 128], [mr / n, mg / n, mb / n].map(Math.round)];
+  let best = cands[0], bestErr = Infinity;
+  for (const bg of cands) {
+    const idx = buildIndex(bg, false, metric, 1);
+    let e = 0;
+    for (const v of cells) e += Math.sqrt(nearest(idx, v, 1).dist[0]);
+    if (e < bestErr) { bestErr = e; best = bg; }
+  }
+  return "#" + best.map((v) => v.toString(16).padStart(2, "0")).join("");
+}
+
+// tile art resized once per build to exactly the output tile size
+function scaledTile(cache, t, ts, pixelArt) {
+  let c = cache.get(t);
+  if (c) return c;
+  let src = S.tiles[t].art, w = src.width;
+  while (w / 2 >= ts) { // shrink in halves so every source pixel contributes
+    const h = Math.max(ts, w >> 1), step = canvasOf(h, h), sx = step.getContext("2d");
+    sx.imageSmoothingQuality = "high"; sx.drawImage(src, 0, 0, h, h); src = step; w = h;
+  }
+  c = canvasOf(ts, ts);
+  const x = c.getContext("2d");
+  x.imageSmoothingEnabled = !(pixelArt && ts >= w); x.imageSmoothingQuality = "high";
+  x.drawImage(src, 0, 0, ts, ts);
+  cache.set(t, c);
+  return c;
+}
+
+/* ---------- build ---------- */
+function settings() {
+  const cols = +$("cols").value;
+  const rows = S.targetW ? Math.max(1, Math.round(cols * S.targetH / S.targetW)) : 0;
+  let ts = +$("tileSize").value;
+  while (ts > 2 && (cols * ts > MAX_SIDE || rows * ts > MAX_SIDE || cols * rows * ts * ts > MAX_AREA)) ts--;
+  return {
+    cols, rows, ts, capped: ts !== +$("tileSize").value,
+    metric: $("metric").value, detail: +$("detail").value, cellMode: $("bgMode").value === "cell", bgHex: $("bgColor").value,
+    variety: +$("variety").value, tint: +$("tint").value / 100,
+    avoid: $("avoidRepeats").checked, pixelArt: $("pixelArt").checked,
+  };
+}
+
+function refreshLabels() {
+  const s = settings();
+  $("colsOut").textContent = s.cols;
+  $("tileSizeOut").textContent = `${$("tileSize").value} px`;
+  $("varietyOut").textContent = s.variety === 1 ? "closest only" : `top ${s.variety}`;
+  $("tintOut").textContent = `${$("tint").value}%`;
+  const mode = $("bgMode").value;
+  $("bgColor").hidden = mode !== "custom";
+  $("bgHelp").textContent = mode === "cell"
+    ? "Each tile sits on its cell's color, and only opaque pixels are matched."
+    : mode === "auto"
+      ? "Tries white, black, grey and the image's average color, and keeps whichever matches best."
+      : "Transparent pixels are counted as this color when matching.";
+  if (S.targetW) {
+    const cells = s.cols * s.rows;
+    $("summary").innerHTML = `Grid <b>${s.cols} × ${s.rows}</b> = ${cells.toLocaleString()} tiles<br>Output <b>${(s.cols * s.ts).toLocaleString()} × ${(s.rows * s.ts).toLocaleString()} px</b>` +
+      (s.capped ? `<br>Tile size reduced to ${s.ts} px to stay within browser canvas limits.` : "");
+  }
+}
+
+let timer = 0;
+function schedule() { refreshLabels(); clearTimeout(timer); timer = setTimeout(build, 180); }
+
+async function build() {
+  if (!S.tiles.length || !S.target) return;
+  const id = ++S.build, s = settings(), t0 = performance.now();
+  setStatus("Matching colors…"); setBar(0);
+  await nextFrame(); if (id !== S.build) return;
+  if ($("bgMode").value === "auto") {
+    s.bgHex = $("bgColor").value = bestBackground(s.metric);
+    $("bgHelp").textContent = `Using ${s.bgHex}, the background that matched this image best.`;
+  }
+  const bg = hexToRgb(s.bgHex);
+  drawPalette();
+
+  const g = s.detail, m = g * g, sw = s.cols * g;
+  const px = sampleTarget(sw, s.rows * g, s.bgHex);
+  const idx = buildIndex(bg, s.cellMode, s.metric, g);
+  const c = document.createElement("canvas");
+  c.width = s.cols * s.ts; c.height = s.rows * s.ts;
+  const x = c.getContext("2d");
+  if (!x) { setStatus("This browser couldn't create an image that large. Lower the tile size or tiles across.", true); return; }
+  if (!s.cellMode) { x.fillStyle = s.bgHex; x.fillRect(0, 0, c.width, c.height); }
+
+  const labCache = new Map(), toSpace = s.metric === "lab"
+    ? (r, gg, b) => { const key = (r << 16) | (gg << 8) | b; let v = labCache.get(key); if (!v) labCache.set(key, v = rgbToLab(r, gg, b)); return v; }
+    : (r, gg, b) => [r, gg, b];
+  const rand = mulberry32(1234), k = s.variety + (s.avoid ? 2 : 0);
+  const pick = new Int32Array(s.cols * s.rows).fill(-1), used = new Uint8Array(S.tiles.length);
+  const T = new Float32Array(m * 3), scaled = new Map();
+  let last = performance.now(), errSum = 0;
+  for (let y = 0; y < s.rows; y++) {
+    for (let col = 0; col < s.cols; col++) {
+      const p = y * s.cols + col;
+      let r = 0, gr = 0, b = 0;
+      for (let sy = 0; sy < g; sy++) for (let sx = 0; sx < g; sx++) {
+        const i = ((y * g + sy) * sw + col * g + sx) * 4, v = toSpace(px[i], px[i + 1], px[i + 2]), o = (sy * g + sx) * 3;
+        T[o] = v[0]; T[o + 1] = v[1]; T[o + 2] = v[2];
+        r += px[i]; gr += px[i + 1]; b += px[i + 2];
+      }
+      r = Math.round(r / m); gr = Math.round(gr / m); b = Math.round(b / m);
+      const { best, dist } = nearest(idx, T, k, g === 1 ? ((r >> 2) << 12) | ((gr >> 2) << 6) | (b >> 2) : undefined);
+      let order = best.map((_, j) => j);
+      if (s.avoid && best.length > 1) {
+        const left = col ? pick[p - 1] : -1, up = y ? pick[p - s.cols] : -1;
+        const f = order.filter((j) => best[j] !== left && best[j] !== up);
+        if (f.length) order = f;
+      }
+      const j = order[Math.floor(rand() * Math.min(s.variety, order.length))], t = best[j];
+      pick[p] = t; used[t] = 1; errSum += Math.sqrt(dist[j]);
+      const dx = col * s.ts, dy = y * s.ts;
+      if (s.cellMode) { x.fillStyle = `rgb(${r},${gr},${b})`; x.fillRect(dx, dy, s.ts, s.ts); }
+      x.drawImage(scaledTile(scaled, t, s.ts, s.pixelArt), dx, dy);
+      if (s.tint > 0) { x.globalAlpha = s.tint; x.fillStyle = `rgb(${r},${gr},${b})`; x.fillRect(dx, dy, s.ts, s.ts); x.globalAlpha = 1; }
+    }
+    if (performance.now() - last > 32) {
+      setBar((y + 1) / s.rows); setStatus(`Placing tiles… row ${y + 1} of ${s.rows}`);
+      await nextFrame(); if (id !== S.build) return; last = performance.now();
+    }
+  }
+  const distinct = used.reduce((a, v) => a + v, 0);
+  c.id = "out"; S.out.replaceWith(c); S.out = c;
+  setBar(0);
+  if (!S.built) { S.built = true; fit(); } else applyScale(S.scale);
+  $("save").disabled = false;
+  const err = errSum / (s.cols * s.rows);
+  S.lastError = err;
+  setStatus(`${(s.cols * s.rows).toLocaleString()} tiles placed · avg color error ${s.metric === "lab" ? "ΔE" : "RGB"} ${err.toFixed(1)} · ${distinct.toLocaleString()} of ${S.tiles.length.toLocaleString()} distinct tiles used · ${c.width.toLocaleString()} × ${c.height.toLocaleString()} px · ${Math.round(performance.now() - t0)} ms`);
+}
+
+function setStatus(msg, err) { const el = $("status"); el.textContent = msg; el.classList.toggle("err", !!err); }
+function setBar(f) { $("bar").style.width = `${Math.round(f * 100)}%`; }
+
+/* ---------- viewer ---------- */
+// S.scale is CSS px per image px; "1:1" means one image pixel per physical screen pixel
+const viewer = $("viewer");
+const dpr = () => window.devicePixelRatio || 1;
+function scaleBounds() {
+  const c = S.out, vw = viewer.clientWidth - 24, vh = viewer.clientHeight - 24;
+  const fitS = Math.min(vw / c.width, vh / c.height);
+  return { min: Math.min(fitS, 1 / dpr()), max: Math.max(8 / dpr(), fitS), fit: fitS };
+}
+function applyScale(sc, cx, cy) {
+  const b = scaleBounds(); sc = Math.min(b.max, Math.max(b.min, sc));
+  const c = S.out, old = S.scale;
+  if (cx === undefined) { cx = viewer.clientWidth / 2; cy = viewer.clientHeight / 2; }
+  const ux = (viewer.scrollLeft + cx - c.offsetLeft) / old, uy = (viewer.scrollTop + cy - c.offsetTop) / old;
+  S.scale = sc;
+  c.style.width = `${c.width * sc}px`; c.style.height = `${c.height * sc}px`;
+  const z = sc * dpr();
+  c.style.imageRendering = z >= 0.999 ? "pixelated" : "auto";
+  viewer.scrollLeft = ux * sc + c.offsetLeft - cx; viewer.scrollTop = uy * sc + c.offsetTop - cy;
+  $("zoom").value = Math.round(1000 * Math.log(sc / b.min) / Math.log(b.max / b.min || 1)) || 0;
+  $("zoomVal").textContent = z >= 0.999 ? `${z.toFixed(z < 10 ? 1 : 0)}×` : `${Math.round(z * 100)}%`;
+}
+function fit() { S.scale = scaleBounds().fit; applyScale(S.scale); }
+
+$("zoomFit").onclick = fit;
+$("zoom1").onclick = () => applyScale(1 / dpr());
+$("zoom").oninput = (e) => { const b = scaleBounds(); applyScale(b.min * (b.max / b.min) ** (e.target.value / 1000)); };
+viewer.addEventListener("wheel", (e) => {
+  if (!S.built) return; e.preventDefault();
+  const r = viewer.getBoundingClientRect();
+  applyScale(S.scale * Math.exp(-e.deltaY * (e.deltaMode ? 0.05 : 0.0018)), e.clientX - r.left, e.clientY - r.top);
+}, { passive: false });
+viewer.addEventListener("dblclick", (e) => { const r = viewer.getBoundingClientRect(); applyScale(S.scale * 2.5, e.clientX - r.left, e.clientY - r.top); });
+let drag = null;
+viewer.addEventListener("pointerdown", (e) => {
+  if (e.pointerType === "touch") return;
+  drag = { x: e.clientX, y: e.clientY, l: viewer.scrollLeft, t: viewer.scrollTop };
+  viewer.setPointerCapture(e.pointerId); viewer.classList.add("dragging");
+});
+viewer.addEventListener("pointermove", (e) => { if (!drag) return; viewer.scrollLeft = drag.l - (e.clientX - drag.x); viewer.scrollTop = drag.t - (e.clientY - drag.y); });
+const endDrag = () => { drag = null; viewer.classList.remove("dragging"); };
+viewer.addEventListener("pointerup", endDrag); viewer.addEventListener("pointercancel", endDrag);
+addEventListener("resize", () => { if (S.built) applyScale(S.scale); });
+
+/* ---------- save ---------- */
+$("save").onclick = async () => {
+  const btn = $("save"); btn.disabled = true;
+  try {
+    setStatus("Encoding PNG…");
+    const blob = await new Promise((r) => S.out.toBlob(r, "image/png"));
+    if (!blob) throw { message: "The browser couldn't encode an image this large." };
+    const filename = S.targetName.replace(/\.[^.]+$/, "") + "-mosaic.png";
+    const dl = window.claude?.use ? await window.claude.use("downloads").catch(() => null) : null;
+    if (dl) {
+      try { await dl.save({ filename, data: blob }); setStatus(`Saved ${filename}`); }
+      catch (e) { setStatus(e.code === "declined" ? "Save cancelled." : `Couldn't save: ${e.message}`, e.code !== "declined"); }
+    } else {
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      setStatus(`Saved ${filename}`);
+    }
+  } catch (e) { setStatus(e.message || "Couldn't save the image.", true); }
+  finally { btn.disabled = false; }
+};
+
+/* ---------- inputs ---------- */
+$("tileDir").onchange = (e) => { loadTileFiles([...e.target.files]); e.target.value = ""; };
+$("tileFiles").onchange = (e) => { loadTileFiles([...e.target.files]); e.target.value = ""; };
+$("targetFile").onchange = (e) => { if (e.target.files[0]) loadTarget(e.target.files[0]); e.target.value = ""; };
+
+async function filesFromDrop(dt) {
+  const entries = [...dt.items].map((it) => it.webkitGetAsEntry?.()).filter(Boolean);
+  if (!entries.length) return [...dt.files];
+  const out = [];
+  const walk = async (en) => {
+    if (en.isFile) out.push(await new Promise((res, rej) => en.file(res, rej)));
+    else if (en.isDirectory) {
+      const rd = en.createReader(); let batch;
+      do { batch = await new Promise((res, rej) => rd.readEntries(res, rej)); for (const ch of batch) await walk(ch); } while (batch.length);
+    }
+  };
+  for (const en of entries) await walk(en);
+  return out;
+}
+function dropZone(el, onFiles) {
+  el.addEventListener("dragover", (e) => { e.preventDefault(); el.classList.add("over"); });
+  el.addEventListener("dragleave", () => el.classList.remove("over"));
+  el.addEventListener("drop", async (e) => { e.preventDefault(); el.classList.remove("over"); onFiles(await filesFromDrop(e.dataTransfer)); });
+}
+dropZone($("tileDrop"), loadTileFiles);
+dropZone($("targetDrop"), (fs) => { const f = fs.find(isImage); if (f) loadTarget(f); });
+
+for (const id of ["cols", "tileSize", "variety", "tint"]) $(id).addEventListener("input", schedule);
+for (const id of ["metric", "detail", "bgMode", "bgColor", "avoidRepeats", "pixelArt"]) $(id).addEventListener("change", schedule);
+$("bgColor").addEventListener("input", schedule);
+
+/* ---------- start with a working sample ---------- */
+S.tiles = makeSampleTiles(); showTiles();
+const sample = makeSampleTarget();
+S.target = sample; S.targetW = sample.width; S.targetH = sample.height; S.targetName = "sample-sunset.png";
+showTarget(sample.toDataURL("image/png"));
+schedule();
+})();
+</script>
+</body>
+</html>

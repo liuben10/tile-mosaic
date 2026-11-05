@@ -1,0 +1,4 @@
+test-tiles/
+__pycache__/
+*.part
+*-mosaic.png
