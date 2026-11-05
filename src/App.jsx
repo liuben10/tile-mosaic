@@ -7,6 +7,7 @@ import AccountBar from "./components/AccountBar.jsx";
 import AuthDialog from "./components/AuthDialog.jsx";
 import Library from "./components/Library.jsx";
 import Landing from "./components/Landing.jsx";
+import TileSetBuilder from "./components/TileSetBuilder.jsx";
 import { useAccount } from "./account/AccountContext.jsx";
 import { loadTileSet, saveMosaic, saveTileSet } from "./account/library.js";
 import { hexToRgb } from "./mosaic/color.js";
@@ -75,6 +76,7 @@ export default function App() {
   const [tileSave, setTileSave] = useState(null); // progress text while saving tiles to the library
   const [mosaicSave, setMosaicSave] = useState(null); // { busy } or { savedFor: canvas }
   const [libraryKey, setLibraryKey] = useState(0);
+  const [builder, setBuilder] = useState(null); // { name, files } the tile set builder starts from, while open
   const buildId = useRef(0);
 
   const grid = useMemo(() => layout(settings, target), [settings, target]);
@@ -124,6 +126,25 @@ export default function App() {
 
   // signed-out users are asked to sign in first; returns false if they aren't signed in yet
   const needUser = () => { if (acct.user) return true; setAuthOpen(true); return false; };
+
+  // open the builder on the current set (unless it's the sample), plus any dropped files
+  function openBuilder(extra = []) {
+    const mine = tiles.source !== "sample" && tiles.files ? tiles.files : [];
+    setBuilder({ name: tiles.source !== "sample" ? tiles.name : "", files: [...mine, ...extra] });
+  }
+
+  function applyBuiltTiles({ name, files, tiles: list }, savedId = null) {
+    setTiles({ list, source: savedId ? "library" : "yours", note: "", files, name, savedId });
+    setTileStatus(null);
+    setBuilder(null);
+  }
+
+  async function saveBuiltTiles(set, progress) {
+    const res = await saveTileSet(acct.api, set.name, set.files, progress);
+    applyBuiltTiles(set, res.id);
+    setStatus({ msg: `Saved “${set.name}” to your library (${res.tileCount.toLocaleString()} tiles, ${res.uploaded.toLocaleString()} new).` });
+    setLibraryKey((k) => k + 1);
+  }
 
   async function handleSaveTiles() {
     if (!needUser()) return;
@@ -219,6 +240,11 @@ export default function App() {
         </div>
       </header>
       <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
+      <TileSetBuilder
+        open={!!builder} seed={builder} target={target} bg={bg} cellMode={settings.bgMode === "cell"} metric={settings.metric}
+        canSave={!!acct.user} signInHint={acct.enabled ? "Log in to save tile sets to your library for future mosaics." : null}
+        onUse={applyBuiltTiles} onSave={saveBuiltTiles} onClose={() => setBuilder(null)}
+      />
 
       {view === "home" && (acct.user || acct.restoringRemembered) ? (
         // logged in, or checking this browser's "Remember me": the studio is about to open
@@ -234,7 +260,7 @@ export default function App() {
         <aside className="panel">
           <TilesPanel
             tiles={tiles.list} source={tiles.source} note={tiles.note} status={tileStatus}
-            bg={bg} cellMode={settings.bgMode === "cell"} onFiles={(f) => handleTileFiles(f)}
+            bg={bg} cellMode={settings.bgMode === "cell"} onBuild={openBuilder}
             account={acct.enabled ? {
               canSave: tiles.source === "yours" && !!tiles.files && !tileSave,
               saved: !!tiles.savedId, progress: tileSave, name: tiles.name, onSave: handleSaveTiles,

@@ -5,8 +5,8 @@ import { tileColor } from "../mosaic/tiles.js";
 
 const THUMBS = 40;
 
-export default function TilesPanel({ tiles, source, note, status, bg, cellMode, onFiles, account }) {
-  const pick = (e) => { onFiles([...e.target.files]); e.target.value = ""; };
+// onBuild(files?) opens the tile set builder, with any dropped files already added
+export default function TilesPanel({ tiles, source, note, status, bg, cellMode, onBuild, account }) {
   const n = tiles.length;
   const thumbs = useMemo(() => {
     const step = Math.max(1, Math.floor(n / THUMBS)), out = [];
@@ -17,12 +17,12 @@ export default function TilesPanel({ tiles, source, note, status, bg, cellMode, 
   return (
     <section className="step">
       <h2><span className="n">1</span>Tiles <span className="tag">{{ sample: "Sample", yours: "Yours", library: "Library" }[source]}</span></h2>
-      <DropZone onFiles={onFiles}>
-        <span className="lead">Drop a folder of PNGs here, or pick one.</span>
-        <label className="btn primary" htmlFor="tileDir">Choose folder</label>
-        <label className="btn" htmlFor="tileFiles">Choose files</label>
-        <input type="file" id="tileDir" webkitdirectory="" directory="" multiple hidden onChange={pick} />
-        <input type="file" id="tileFiles" multiple accept="image/*" hidden onChange={pick} />
+      <DropZone onFiles={(files) => onBuild(files)}>
+        <span className="lead">Pick the photos your mosaic is made of: add many at once, review them, remove any.</span>
+        <button className="btn primary" type="button" onClick={() => onBuild()}>
+          {source === "sample" ? "Build tile set" : "Edit tile set"}
+        </button>
+        <span>or drop images here</span>
       </DropZone>
       <p className="meta">
         {status ?? (
