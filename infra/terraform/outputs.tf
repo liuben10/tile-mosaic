@@ -30,3 +30,26 @@ output "image" {
   description = "The image tag built from the current source (only when build_image is true)."
   value       = var.build_image ? "${aws_ecr_repository.app.repository_url}:${local.build_tag}" : null
 }
+
+output "api_ecr_repository_url" {
+  description = "Push the API image here."
+  value       = aws_ecr_repository.api.repository_url
+}
+
+output "media_bucket" {
+  description = "S3 bucket holding users' tiles and mosaics."
+  value       = aws_s3_bucket.media.bucket
+}
+
+output "db_endpoint" {
+  description = "RDS PostgreSQL address (reachable only from the instance)."
+  value       = aws_db_instance.db.address
+}
+
+output "cognito_user_pool_id" {
+  value = aws_cognito_user_pool.users.id
+}
+
+output "cognito_client_id" {
+  value = aws_cognito_user_pool_client.web.id
+}

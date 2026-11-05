@@ -1,0 +1,57 @@
+# Local stack for developing and testing accounts and the library:
+#   docker compose up --build        # then open http://localhost:8080
+#
+# Postgres stands in for RDS and LocalStack for S3. Sign-in runs in "dev" mode: any
+# email signs you in with no password, so you can try several users. Cognito is only
+# used in AWS. For hot reload, run `npm run dev` too and open http://localhost:5173.
+name: tile-mosaic
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: tilemosaic
+      POSTGRES_USER: tilemosaic
+      POSTGRES_PASSWORD: tilemosaic
+    ports: ["5432:5432"]
+    volumes: [db-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "tilemosaic"]
+      interval: 2s
+      retries: 30
+
+  s3:
+    image: localstack/localstack:4.0
+    environment:
+      SERVICES: s3
+    ports: ["4566:4566"]
+    volumes: ["./scripts/localstack-init.sh:/etc/localstack/init/ready.d/init.sh:ro"]
+    healthcheck:
+      test: ["CMD", "bash", "-c", "awslocal s3api head-bucket --bucket tile-mosaic-media"]
+      interval: 3s
+      retries: 40
+
+  api:
+    build: ./api
+    environment:
+      NODE_ENV: development
+      AUTH_MODE: dev
+      DATABASE_URL: postgres://tilemosaic:tilemosaic@db:5432/tilemosaic
+      AWS_REGION: us-east-2
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      S3_BUCKET: tile-mosaic-media
+      S3_ENDPOINT: http://s3:4566
+      S3_PUBLIC_ENDPOINT: http://localhost:4566
+    ports: ["3000:3000"]
+    depends_on:
+      db: { condition: service_healthy }
+      s3: { condition: service_healthy }
+
+  web:
+    build: .
+    ports: ["8080:80"]
+    depends_on: [api]
+
+volumes:
+  db-data:

@@ -5,7 +5,7 @@ import { tileColor } from "../mosaic/tiles.js";
 
 const THUMBS = 40;
 
-export default function TilesPanel({ tiles, source, note, status, bg, cellMode, onFiles }) {
+export default function TilesPanel({ tiles, source, note, status, bg, cellMode, onFiles, account }) {
   const pick = (e) => { onFiles([...e.target.files]); e.target.value = ""; };
   const n = tiles.length;
   const thumbs = useMemo(() => {
@@ -16,7 +16,7 @@ export default function TilesPanel({ tiles, source, note, status, bg, cellMode, 
 
   return (
     <section className="step">
-      <h2><span className="n">1</span>Tiles <span className="tag">{source === "sample" ? "Sample" : "Yours"}</span></h2>
+      <h2><span className="n">1</span>Tiles <span className="tag">{{ sample: "Sample", yours: "Yours", library: "Library" }[source]}</span></h2>
       <DropZone onFiles={onFiles}>
         <span className="lead">Drop a folder of PNGs here, or pick one.</span>
         <label className="btn primary" htmlFor="tileDir">Choose folder</label>
@@ -33,6 +33,16 @@ export default function TilesPanel({ tiles, source, note, status, bg, cellMode, 
           </>
         )}
       </p>
+      {account && source !== "sample" && (
+        <div className="save-row">
+          {account.saved ? <span className="meta">In your library as <b>{account.name}</b></span>
+            : account.progress ? <span className="meta">{account.progress}</span>
+            : <span className="meta">Keep <b>{account.name}</b> for next time</span>}
+          {!account.saved && (
+            <button className="btn" type="button" disabled={!account.canSave} onClick={account.onSave}>Save to library</button>
+          )}
+        </div>
+      )}
       <span className="strip-label">Colors available, by hue</span>
       <PaletteStrip tiles={tiles} bg={bg} cellMode={cellMode} />
       <div className="thumbs">

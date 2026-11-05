@@ -1,0 +1,20 @@
+{
+  "name": "tile-mosaic-api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Accounts, saved tile sets and saved mosaics for Tile Mosaic.",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1162.0",
+    "@aws-sdk/client-secrets-manager": "^3.1162.0",
+    "@aws-sdk/s3-request-presigner": "^3.1162.0",
+    "express": "^5.3.0",
+    "jose": "^6.2.15",
+    "pg": "^8.23.1"
+  }
+}

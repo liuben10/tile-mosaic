@@ -1,26 +1,41 @@
 #!/bin/bash
-# First-boot setup: install Docker and run the app container as a systemd service.
+# First-boot setup: install Docker and run the app as a systemd service.
 set -euxo pipefail
 
 dnf install -y docker
 systemctl enable --now docker
 
-# Pull the latest image and (re)start the container. Deploys re-run this through SSM.
+# Pull the latest images and (re)start both containers. Deploys re-run this through SSM.
+#  - api: accounts and library; its settings come from Parameter Store on every start
+#  - web: nginx serving the site on port 80 and proxying /api/ to the api container
 cat > /usr/local/bin/${app_name}-run <<'SCRIPT'
 #!/bin/bash
 set -euo pipefail
 aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${registry}
 docker pull ${image}
+docker pull ${api_image}
+
+install -d -m 700 /etc/${app_name}
+aws ssm get-parameter --region ${region} --name ${api_env} --query Parameter.Value --output text > /etc/${app_name}/api.env
+chmod 600 /etc/${app_name}/api.env
+
+docker network inspect ${app_name} >/dev/null 2>&1 || docker network create ${app_name}
+
+docker rm -f ${app_name}-api 2>/dev/null || true
+docker run -d --name ${app_name}-api --network ${app_name} --network-alias api --restart unless-stopped \
+  --env-file /etc/${app_name}/api.env ${api_image}
+
 docker rm -f ${app_name} 2>/dev/null || true
-docker run -d --name ${app_name} --restart unless-stopped -p 80:80 ${image}
+docker run -d --name ${app_name} --network ${app_name} --restart unless-stopped -p 80:80 ${image}
+
 docker image prune -f
 SCRIPT
 chmod +x /usr/local/bin/${app_name}-run
 
-# Retries every 30 s, so the instance can boot before the first image has been pushed.
+# Retries every 30 s, so the instance can boot before the first images have been pushed.
 cat > /etc/systemd/system/${app_name}.service <<'UNIT'
 [Unit]
-Description=Pull and run the ${app_name} container
+Description=Pull and run the ${app_name} containers
 After=docker.service network-online.target
 Wants=network-online.target
 Requires=docker.service

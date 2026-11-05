@@ -39,3 +39,33 @@ variable "build_image" {
   type        = bool
   default     = true
 }
+
+variable "protect_data" {
+  description = "Guard user data: deletion protection on the database and user pool, and keep the media bucket from being deleted while it has files. Set to false before `terraform destroy`."
+  type        = bool
+  default     = true
+}
+
+variable "db_instance_class" {
+  description = "RDS instance class for the metadata database."
+  type        = string
+  default     = "db.t4g.micro"
+}
+
+variable "db_engine_version" {
+  description = "PostgreSQL major version for RDS."
+  type        = string
+  default     = "17"
+}
+
+variable "extra_origins" {
+  description = "More site origins allowed to upload to and download from the media bucket, e.g. [\"https://mosaic.example.com\"]. The Elastic IP's http:// origin is always allowed."
+  type        = list(string)
+  default     = []
+}
+
+variable "db_backup_retention_days" {
+  description = "Days of automated database backups. AWS free-plan accounts allow at most 1; raise it (up to 35) once the account is upgraded."
+  type        = number
+  default     = 1
+}

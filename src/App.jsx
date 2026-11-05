@@ -3,6 +3,11 @@ import TilesPanel from "./components/TilesPanel.jsx";
 import TargetPanel from "./components/TargetPanel.jsx";
 import SettingsPanel from "./components/SettingsPanel.jsx";
 import MosaicViewer from "./components/MosaicViewer.jsx";
+import AccountBar from "./components/AccountBar.jsx";
+import AuthDialog from "./components/AuthDialog.jsx";
+import Library from "./components/Library.jsx";
+import { useAccount } from "./account/AccountContext.jsx";
+import { loadTileSet, saveMosaic, saveTileSet } from "./account/library.js";
 import { hexToRgb } from "./mosaic/color.js";
 import { saveBlob } from "./mosaic/files.js";
 import { buildMosaic, layout } from "./mosaic/render.js";
@@ -17,8 +22,16 @@ const DEFAULT_SETTINGS = {
 };
 const BUILD_DELAY = 180; // ms to wait after the last change before rebuilding
 
+// a name for a set of tile files: the folder they came from, else today's date
+function setName(files) {
+  const dir = files.find((f) => f.webkitRelativePath)?.webkitRelativePath.split("/")[0];
+  return dir || `Tiles ${new Date().toLocaleDateString()}`;
+}
+
 export default function App() {
-  const [tiles, setTiles] = useState(() => ({ list: makeSampleTiles(), source: "sample", note: "" }));
+  const acct = useAccount();
+  // files/name/savedId are kept for "Save to library"; savedId is set once the set is in the library
+  const [tiles, setTiles] = useState(() => ({ list: makeSampleTiles(), source: "sample", note: "", files: null, name: "", savedId: null }));
   const [tileStatus, setTileStatus] = useState(null);
   const [target, setTarget] = useState(makeSampleTarget);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
@@ -26,6 +39,11 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState({ msg: "" });
   const [saving, setSaving] = useState(false);
+  const [view, setView] = useState("studio");
+  const [authOpen, setAuthOpen] = useState(false);
+  const [tileSave, setTileSave] = useState(null); // progress text while saving tiles to the library
+  const [mosaicSave, setMosaicSave] = useState(null); // { busy } or { savedFor: canvas }
+  const [libraryKey, setLibraryKey] = useState(0);
   const buildId = useRef(0);
 
   const grid = useMemo(() => layout(settings, target), [settings, target]);
@@ -56,17 +74,67 @@ export default function App() {
       }
     }, BUILD_DELAY);
     return () => clearTimeout(timer);
-  }, [tiles, target, settings]);
+  }, [tiles.list, target, settings]); // only the tile images matter, not their library state
 
-  async function handleTileFiles(files) {
+  async function handleTileFiles(files, saved = null) {
     const res = await readTiles(files, (done, total) => setTileStatus(`Reading tiles… ${done} / ${total}`));
     if (!res.total) return setTileStatus("No images found there. Pick a folder that contains PNG, JPG, GIF or WebP files.");
     if (!res.tiles.length) return setTileStatus("None of those images could be used as tiles (they were empty or unreadable).");
     const notes = [];
     if (res.empty) notes.push(`${res.empty} blank skipped`);
     if (res.failed) notes.push(`${res.failed} unreadable`);
-    setTiles({ list: res.tiles, source: "yours", note: notes.join(", ") });
+    setTiles({
+      list: res.tiles, source: saved ? "library" : "yours", note: notes.join(", "),
+      files, name: saved?.name ?? setName(files), savedId: saved?.id ?? null,
+    });
     setTileStatus(null);
+  }
+
+  // signed-out users are asked to sign in first; returns false if they aren't signed in yet
+  const needUser = () => { if (acct.user) return true; setAuthOpen(true); return false; };
+
+  async function handleSaveTiles() {
+    if (!needUser()) return;
+    try {
+      setTileSave("Preparing…");
+      const res = await saveTileSet(acct.api, tiles.name, tiles.files, setTileSave);
+      setTiles((t) => ({ ...t, savedId: res.id, source: "library" }));
+      setStatus({ msg: `Saved “${tiles.name}” to your library (${res.tileCount.toLocaleString()} tiles, ${res.uploaded.toLocaleString()} new).` });
+      setLibraryKey((k) => k + 1);
+    } catch (e) {
+      setStatus({ msg: `Couldn't save the tiles: ${e.message}`, err: true });
+    } finally {
+      setTileSave(null);
+    }
+  }
+
+  async function handleUseTileSet(set) {
+    const { files } = await loadTileSet(acct.api, set.id, setTileStatus);
+    setView("studio");
+    await handleTileFiles(files, { id: set.id, name: set.name });
+  }
+
+  async function handleSaveMosaic() {
+    if (!needUser()) return;
+    const canvas = result.canvas;
+    setMosaicSave({ busy: true });
+    try {
+      setStatus({ msg: "Encoding PNG…" });
+      const png = await new Promise((r) => canvas.toBlob(r, "image/png"));
+      if (!png) throw new Error("The browser couldn't encode an image this large.");
+      setStatus({ msg: `Uploading ${(png.size / 1048576).toFixed(1)} MB…` });
+      const title = target.name.replace(/\.[^.]+$/, "") + " mosaic";
+      await saveMosaic(acct.api, {
+        canvas, png, title, targetName: target.name, tileSetId: tiles.savedId,
+        settings: { ...settings, cols: result.cols, rows: result.rows, tiles: tiles.list.length },
+      });
+      setMosaicSave({ savedFor: canvas });
+      setStatus({ msg: `Saved “${title}” to your library.` });
+      setLibraryKey((k) => k + 1);
+    } catch (e) {
+      setMosaicSave(null);
+      setStatus({ msg: `Couldn't save the mosaic: ${e.message}`, err: true });
+    }
   }
 
   async function handleTargetFile(file) {
@@ -107,26 +175,45 @@ export default function App() {
       <header className="top">
         <div className="wrap">
           <h1>Tile Mosaic</h1>
-          <p>Rebuild a picture out of a folder of small images. Every cell of the target is replaced by the tile whose average color is closest. It all runs in your browser; nothing is uploaded anywhere.</p>
+          <p>Rebuild a picture out of a folder of small images. Every cell of the target is replaced by the tile whose average color is closest. It all runs in your browser; nothing is uploaded unless you save it to your library.</p>
+          <AccountBar view={view} onView={setView} onSignIn={() => setAuthOpen(true)} />
         </div>
       </header>
+      <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
 
+      {view === "library" && acct.user ? (
+        <main className="wrap">
+          <Library onUseTileSet={handleUseTileSet} refreshKey={libraryKey} />
+        </main>
+      ) : (
       <main className="wrap app">
         <aside className="panel">
           <TilesPanel
             tiles={tiles.list} source={tiles.source} note={tiles.note} status={tileStatus}
-            bg={bg} cellMode={settings.bgMode === "cell"} onFiles={handleTileFiles}
+            bg={bg} cellMode={settings.bgMode === "cell"} onFiles={(f) => handleTileFiles(f)}
+            account={acct.enabled ? {
+              canSave: tiles.source === "yours" && !!tiles.files && !tileSave,
+              saved: !!tiles.savedId, progress: tileSave, name: tiles.name, onSave: handleSaveTiles,
+            } : null}
           />
           <TargetPanel target={target} isSample={!!target.sample} onFile={handleTargetFile} />
           <SettingsPanel settings={settings} onChange={onSetting} grid={grid} autoBg={settings.bgMode === "auto" ? result?.bgHex : null} />
         </aside>
 
         <section className="stage">
-          <MosaicViewer canvas={result?.canvas ?? null} progress={progress} canSave={!!result} saving={saving} onSave={handleSave} />
+          <MosaicViewer canvas={result?.canvas ?? null} progress={progress} canSave={!!result} saving={saving} onSave={handleSave}>
+            {acct.enabled && (
+              <button className="btn" type="button" disabled={!result || mosaicSave?.busy || mosaicSave?.savedFor === result?.canvas}
+                onClick={handleSaveMosaic}>
+                {mosaicSave?.busy ? "Saving…" : mosaicSave?.savedFor && mosaicSave.savedFor === result?.canvas ? "Saved ✓" : "Save to library"}
+              </button>
+            )}
+          </MosaicViewer>
           <div className={status.err ? "status err" : "status"}>{status.msg}</div>
           <p className="hint">Scroll or use the slider to zoom. Drag to pan. Double-click to zoom in on a spot.</p>
         </section>
       </main>
+      )}
     </>
   );
 }

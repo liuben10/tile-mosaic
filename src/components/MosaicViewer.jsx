@@ -4,7 +4,7 @@ const dpr = () => window.devicePixelRatio || 1;
 
 // Zoomable, draggable view of the finished mosaic canvas.
 // Scale is CSS px per image px; "1:1" means one image pixel per physical screen pixel.
-export default function MosaicViewer({ canvas, progress, canSave, saving, onSave }) {
+export default function MosaicViewer({ canvas, progress, canSave, saving, onSave, children }) {
   const viewerRef = useRef(null), innerRef = useRef(null);
   const scaleRef = useRef(1), shownRef = useRef(false), dragRef = useRef(null);
   const [zoom, setZoom] = useState({ slider: 0, label: "—" });
@@ -73,7 +73,10 @@ export default function MosaicViewer({ canvas, progress, canSave, saving, onSave
             onChange={(e) => { const b = bounds(); applyScale(b.min * (b.max / b.min) ** (e.target.value / 1000)); }} />
           <span className="val">{zoom.label}</span>
         </div>
-        <button className="btn primary" type="button" disabled={!canSave || saving} onClick={onSave}>Save PNG</button>
+        <div className="actions">
+          {children}
+          <button className="btn primary" type="button" disabled={!canSave || saving} onClick={onSave}>Save PNG</button>
+        </div>
       </div>
       <div
         className="viewer"

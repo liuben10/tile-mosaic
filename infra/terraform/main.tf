@@ -81,8 +81,20 @@ resource "aws_ecr_repository" "app" {
   }
 }
 
+# the API (accounts and library) is a second image
+resource "aws_ecr_repository" "api" {
+  name                 = "${var.app_name}-api"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
 resource "aws_ecr_lifecycle_policy" "app" {
-  repository = aws_ecr_repository.app.name
+  for_each   = { web = aws_ecr_repository.app.name, api = aws_ecr_repository.api.name }
+  repository = each.value
 
   policy = jsonencode({
     rules = [{
@@ -96,6 +108,11 @@ resource "aws_ecr_lifecycle_policy" "app" {
       action = { type = "expire" }
     }]
   })
+}
+
+moved {
+  from = aws_ecr_lifecycle_policy.app
+  to   = aws_ecr_lifecycle_policy.app["web"]
 }
 
 # ---------------------------------------------------------------------------
@@ -146,15 +163,18 @@ resource "aws_instance" "app" {
   iam_instance_profile   = aws_iam_instance_profile.instance.name
 
   user_data = templatefile("${path.module}/user_data.sh.tftpl", {
-    region   = var.region
-    registry = split("/", aws_ecr_repository.app.repository_url)[0]
-    image    = "${aws_ecr_repository.app.repository_url}:${var.image_tag}"
-    app_name = var.app_name
+    region    = var.region
+    registry  = split("/", aws_ecr_repository.app.repository_url)[0]
+    image     = "${aws_ecr_repository.app.repository_url}:${var.image_tag}"
+    api_image = "${aws_ecr_repository.api.repository_url}:${var.image_tag}"
+    api_env   = aws_ssm_parameter.api_env.name
+    app_name  = var.app_name
   })
   user_data_replace_on_change = true
 
   metadata_options {
-    http_tokens = "required" # IMDSv2 only
+    http_tokens                 = "required" # IMDSv2 only
+    http_put_response_hop_limit = 2          # lets containers reach the instance role's credentials
   }
 
   root_block_device {

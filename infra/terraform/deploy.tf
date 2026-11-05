@@ -1,9 +1,9 @@
 # ---------------------------------------------------------------------------
-# Build and ship the app image as part of `terraform apply`
+# Build and ship the app images as part of `terraform apply`
 #
-# Terraform hashes the files that go into the image. When the hash changes it
-# builds the image with your local Docker, pushes it to ECR, and tells the
-# instance (through SSM) to restart the container on the new image.
+# Terraform hashes the files that go into each image (the web site and the API).
+# When a hash changes it builds that image with your local Docker, pushes it to
+# ECR, and tells the instance (through SSM) to restart the containers.
 #
 # The commands avoid shell-specific syntax so they run the same from cmd.exe on
 # Windows and from sh on macOS/Linux. Set build_image = false to skip all of this
@@ -21,6 +21,15 @@ locals {
 
   source_hash = sha1(join("", [for f in local.image_inputs : "${f}:${filesha1("${local.repo_root}/${f}")}"]))
   build_tag   = substr(local.source_hash, 0, 12)
+
+  api_root = "${local.repo_root}/api"
+  api_inputs = sort(concat(
+    ["Dockerfile", "package.json", "package-lock.json"],
+    tolist(fileset(local.api_root, "src/**")),
+    tolist(fileset(local.api_root, "migrations/**")),
+  ))
+  api_hash      = sha1(join("", [for f in local.api_inputs : "${f}:${filesha1("${local.api_root}/${f}")}"]))
+  api_build_tag = substr(local.api_hash, 0, 12)
 
   registry = split("/", aws_ecr_repository.app.repository_url)[0]
 }
@@ -42,10 +51,28 @@ resource "terraform_data" "image" {
   }
 }
 
+resource "terraform_data" "api_image" {
+  count = var.build_image ? 1 : 0
+
+  triggers_replace = [local.api_hash, aws_ecr_repository.api.repository_url]
+
+  provisioner "local-exec" {
+    working_dir = local.api_root
+    command = join(" && ", [
+      "aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin ${local.registry}",
+      "docker build --platform linux/amd64 -t ${aws_ecr_repository.api.repository_url}:${local.api_build_tag} -t ${aws_ecr_repository.api.repository_url}:${var.image_tag} .",
+      "docker push ${aws_ecr_repository.api.repository_url}:${local.api_build_tag}",
+      "docker push ${aws_ecr_repository.api.repository_url}:${var.image_tag}",
+    ])
+  }
+}
+
 resource "terraform_data" "restart" {
   count = var.build_image ? 1 : 0
 
-  triggers_replace = [terraform_data.image[0].id, aws_instance.app.id]
+  triggers_replace = [
+    terraform_data.image[0].id, terraform_data.api_image[0].id, aws_instance.app.id, aws_ssm_parameter.api_env.version,
+  ]
 
   # On a brand-new instance the SSM agent may not be registered yet, so this can
   # fail. That's fine: the instance's service retries every 30 seconds until it

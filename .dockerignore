@@ -8,3 +8,5 @@ infra
 *.md
 Dockerfile
 .dockerignore
+api
+docker-compose.yml
