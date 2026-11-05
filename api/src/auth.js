@@ -22,8 +22,13 @@ async function identify(header) {
   }
 
   if (scheme !== "Bearer" || !value) return null;
+  return verifyIdToken(value);
+}
+
+// { sub, email } from a Cognito ID token, or null if it isn't a valid one from our user pool
+export async function verifyIdToken(token) {
   try {
-    const { payload } = await jwtVerify(value, jwks, { issuer, audience: auth.clientId });
+    const { payload } = await jwtVerify(token, jwks, { issuer, audience: auth.clientId });
     if (payload.token_use !== "id") return null;
     return { sub: payload.sub, email: payload.email ?? null };
   } catch {

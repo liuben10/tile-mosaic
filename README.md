@@ -30,6 +30,18 @@ for each upload and download, and records the metadata. Every request is checked
 against a Cognito ID token, and every query and S3 key is scoped to the caller's user
 id, so one user can't see or touch another's files. Tiles are stored once per user by
 content hash, so saving the same sprites in several sets doesn't store them twice.
+
+Staying signed in depends on **Remember me next time** in the sign-in dialog:
+
+- **Checked:** the API keeps the Cognito refresh token in an `HttpOnly`, `SameSite=Strict`
+  cookie (`tm_session`, 30 days, scoped to `/api/session`). Page scripts can't read it; the
+  page only ever holds the short-lived ID token, in memory. Sign out deletes the cookie and
+  revokes the token.
+- **Unchecked:** no cookie. The tokens stay in that tab's `sessionStorage`, so closing the
+  tab signs you out.
+
+Visitors who aren't signed in see the front page at `/`; signed-in (or remembered) users go
+straight to the studio at `/studio`.
 The API applies `api/migrations/*.sql` on startup.
 
 ## Run locally

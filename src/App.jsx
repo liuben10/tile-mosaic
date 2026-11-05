@@ -6,6 +6,7 @@ import MosaicViewer from "./components/MosaicViewer.jsx";
 import AccountBar from "./components/AccountBar.jsx";
 import AuthDialog from "./components/AuthDialog.jsx";
 import Library from "./components/Library.jsx";
+import Landing from "./components/Landing.jsx";
 import { useAccount } from "./account/AccountContext.jsx";
 import { loadTileSet, saveMosaic, saveTileSet } from "./account/library.js";
 import { hexToRgb } from "./mosaic/color.js";
@@ -21,6 +22,25 @@ const DEFAULT_SETTINGS = {
   variety: 1, tint: 0, avoidRepeats: true, pixelArt: true,
 };
 const BUILD_DELAY = 180; // ms to wait after the last change before rebuilding
+
+// Pages, by URL path. nginx and Vite serve index.html for every path, so these work as direct links.
+const PATHS = { home: "/", studio: "/studio", library: "/library" };
+const viewOf = (path) => Object.keys(PATHS).find((v) => PATHS[v] === (path.replace(/\/+$/, "") || "/")) ?? "home";
+
+function useView() {
+  const [view, set] = useState(() => viewOf(location.pathname));
+  useEffect(() => {
+    const onPop = () => set(viewOf(location.pathname));
+    addEventListener("popstate", onPop);
+    return () => removeEventListener("popstate", onPop);
+  }, []);
+  const go = useCallback((v, { replace = false } = {}) => {
+    if (PATHS[v] !== location.pathname) history[replace ? "replaceState" : "pushState"](null, "", PATHS[v]);
+    set(v);
+    scrollTo(0, 0);
+  }, []);
+  return [view, go];
+}
 
 // a name for a set of tile files: the folder they came from, else today's date
 function setName(files) {
@@ -39,7 +59,18 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState({ msg: "" });
   const [saving, setSaving] = useState(false);
-  const [view, setView] = useState("studio");
+  const [view, setView] = useView();
+  // the studio builds its first mosaic only once someone opens it, not on the front page
+  const [started, setStarted] = useState(view !== "home");
+  useEffect(() => { if (view !== "home") setStarted(true); }, [view]);
+
+  // the front page is for visitors: once signed in (or remembered) you land in the studio,
+  // and the library needs a sign-in
+  useEffect(() => {
+    if (!acct.ready) return;
+    if (acct.user && view === "home") setView("studio", { replace: true });
+    else if (!acct.user && view === "library") setView("home", { replace: true });
+  }, [acct.ready, acct.user, view, setView]);
   const [authOpen, setAuthOpen] = useState(false);
   const [tileSave, setTileSave] = useState(null); // progress text while saving tiles to the library
   const [mosaicSave, setMosaicSave] = useState(null); // { busy } or { savedFor: canvas }
@@ -51,6 +82,7 @@ export default function App() {
 
   // rebuild shortly after tiles, target or settings change; a newer build cancels an older one
   useEffect(() => {
+    if (!started) return;
     const id = ++buildId.current;
     const timer = setTimeout(async () => {
       setProgress(0);
@@ -74,7 +106,7 @@ export default function App() {
       }
     }, BUILD_DELAY);
     return () => clearTimeout(timer);
-  }, [tiles.list, target, settings]); // only the tile images matter, not their library state
+  }, [started, tiles.list, target, settings]); // only the tile images matter, not their library state
 
   async function handleTileFiles(files, saved = null) {
     const res = await readTiles(files, (done, total) => setTileStatus(`Reading tiles… ${done} / ${total}`));
@@ -174,14 +206,26 @@ export default function App() {
     <>
       <header className="top">
         <div className="wrap">
-          <h1>Tile Mosaic</h1>
+          <h1><button className="brand" type="button" onClick={() => setView("home")}>Tile Mosaic</button></h1>
+          {view === "home" ? (
+            <nav className="home-nav">
+              {!acct.user && <button className="btn open-studio" type="button" onClick={() => setView("studio")}>Open the studio</button>}
+              <AccountBar view={view} onView={setView} onSignIn={() => setAuthOpen(true)} />
+            </nav>
+          ) : <>
           <p>Rebuild a picture out of a folder of small images. Every cell of the target is replaced by the tile whose average color is closest. It all runs in your browser; nothing is uploaded unless you save it to your library.</p>
           <AccountBar view={view} onView={setView} onSignIn={() => setAuthOpen(true)} />
+          </>}
         </div>
       </header>
       <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
 
-      {view === "library" && acct.user ? (
+      {view === "home" && (!acct.ready || acct.user) ? (
+        <main className="landing" aria-busy="true" />
+      ) : view === "home" ? (
+        <Landing onStart={() => setView("studio")} signedIn={!!acct.user} onLibrary={() => setView("library")}
+          onSignIn={acct.enabled ? () => setAuthOpen(true) : null} />
+      ) : view === "library" && acct.user ? (
         <main className="wrap">
           <Library onUseTileSet={handleUseTileSet} refreshKey={libraryKey} />
         </main>

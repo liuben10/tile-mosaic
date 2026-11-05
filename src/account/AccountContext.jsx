@@ -3,17 +3,44 @@ import * as cognito from "./cognito.js";
 
 // Signed-in state and an authenticated fetch for the rest of the app.
 // When there is no API (the site served as plain static files), accounts are simply off.
+//
+// Where the sign-in is kept depends on "Remember me next time":
+//  - remembered: the refresh token lives only in an HttpOnly cookie set by the API
+//    (api/src/session.js); the page holds just the short-lived ID token, in memory.
+//  - not remembered: no cookie. The tokens stay in this tab's sessionStorage, so a
+//    reload keeps you signed in but closing the tab signs you out.
 
-const KEY = "tile-mosaic.session";
+const TAB_KEY = "tile-mosaic.session";
 const Ctx = createContext(null);
 export const useAccount = () => useContext(Ctx);
 
-function loadSession() {
-  try { return JSON.parse(localStorage.getItem(KEY)) || null; } catch { return null; }
+function loadTabSession() {
+  try { return JSON.parse(sessionStorage.getItem(TAB_KEY)) || null; } catch { return null; }
 }
 function storeSession(s) {
-  try { s ? localStorage.setItem(KEY, JSON.stringify(s)) : localStorage.removeItem(KEY); } catch { /* private mode */ }
+  try {
+    if (s && !s.remembered) sessionStorage.setItem(TAB_KEY, JSON.stringify(s));
+    else sessionStorage.removeItem(TAB_KEY);
+    localStorage.removeItem(TAB_KEY); // earlier versions kept it here, with no way to opt out
+  } catch { /* storage blocked */ }
 }
+
+// the API's session endpoints (they use the cookie, so no Authorization header)
+async function sessionCall(path, method, body) {
+  const res = await fetch(`api/session${path}`, {
+    method, credentials: "same-origin",
+    headers: body ? { "Content-Type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 204) return null;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, data.error || `Request failed (${res.status})`);
+  return data;
+}
+const remembered = (r) => ({
+  email: r.email, remembered: true,
+  idToken: r.idToken ?? null, expiresAt: r.expiresIn ? Date.now() + (r.expiresIn - 60) * 1000 : Infinity,
+});
 
 export class ApiError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -21,7 +48,8 @@ export class ApiError extends Error {
 
 export function AccountProvider({ children }) {
   const [auth, setAuth] = useState(null);          // { mode: "cognito" | "dev" | "off", ... }
-  const [session, setSession] = useState(loadSession);
+  const [session, setSession] = useState(loadTabSession);
+  const [restoring, setRestoring] = useState(true); // checking for a remembered sign-in
   const sessionRef = useRef(session);
   const refreshing = useRef(null);
 
@@ -30,9 +58,16 @@ export function AccountProvider({ children }) {
   useEffect(() => {
     fetch("api/config")
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((c) => setAuth(c.auth))
-      .catch(() => setAuth({ mode: "off" }));
-  }, []);
+      .then(async (c) => {
+        setAuth(c.auth);
+        // signed in in this tab already, else try the "remember me" cookie
+        if (!sessionRef.current && c.auth.mode !== "off") {
+          await sessionCall("/refresh", "POST").then((r) => update(remembered(r)), () => {});
+        }
+      })
+      .catch(() => setAuth({ mode: "off" }))
+      .finally(() => setRestoring(false));
+  }, [update]);
 
   // a valid ID token, refreshed if it's about to expire; null when signed out
   const token = useCallback(async () => {
@@ -40,9 +75,9 @@ export function AccountProvider({ children }) {
     if (!s) return null;
     if (auth?.mode === "dev") return `Dev ${s.email}`;
     if (Date.now() < s.expiresAt) return `Bearer ${s.idToken}`;
-    refreshing.current ??= cognito.refresh(auth, s)
+    refreshing.current ??= (s.remembered ? sessionCall("/refresh", "POST").then(remembered) : cognito.refresh(auth, s))
       .then((n) => { update(n); return n; })
-      .catch((e) => { if (e.code === "NotAuthorizedException") update(null); throw e; })
+      .catch((e) => { if (e.code === "NotAuthorizedException" || e.status === 401) update(null); throw e; })
       .finally(() => { refreshing.current = null; });
     return `Bearer ${(await refreshing.current).idToken}`;
   }, [auth, update]);
@@ -62,14 +97,22 @@ export function AccountProvider({ children }) {
   }, [token, update]);
 
   const value = useMemo(() => ({
-    ready: auth !== null,
+    ready: auth !== null && !restoring,
     enabled: !!auth && auth.mode !== "off",
     mode: auth?.mode,
     user: session ? { email: session.email } : null,
     api,
-    signIn: async (email, password) => {
+    // remember: keep this browser signed in with the API's cookie (up to 30 days)
+    signIn: async (email, password, remember = false) => {
       email = email.trim().toLowerCase();
-      update(auth.mode === "dev" ? { email } : await cognito.signIn(auth, email, password));
+      if (auth.mode === "dev") {
+        if (remember) await sessionCall("", "POST", { email });
+        return update({ email, remembered: remember });
+      }
+      const tokens = await cognito.signIn(auth, email, password);
+      if (!remember) return update(tokens);
+      // hand the refresh token to the API's cookie and keep only the ID token here
+      update(remembered(await sessionCall("", "POST", { refreshToken: tokens.refreshToken })));
     },
     signUp: (email, password) => cognito.signUp(auth, email.trim().toLowerCase(), password),
     confirmSignUp: (email, code) => cognito.confirmSignUp(auth, email.trim().toLowerCase(), code.trim()),
@@ -78,10 +121,11 @@ export function AccountProvider({ children }) {
     confirmForgotPassword: (email, code, pw) => cognito.confirmForgotPassword(auth, email.trim().toLowerCase(), code.trim(), pw),
     signOut: () => {
       const s = sessionRef.current;
-      if (s && auth?.mode === "cognito") cognito.revoke(auth, s);
+      if (s?.remembered) sessionCall("", "DELETE").catch(() => {}); // clears the cookie and revokes the token
+      else if (s && auth?.mode === "cognito") cognito.revoke(auth, s);
       update(null);
     },
-  }), [auth, session, api, update]);
+  }), [auth, restoring, session, api, update]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

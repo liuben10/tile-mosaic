@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useAccount } from "../account/AccountContext.jsx";
+import { WorkflowStrip } from "./Showcase.jsx";
 
 // Sign in, create an account, confirm the emailed code, or reset a password.
 export default function AuthDialog({ open, onClose }) {
@@ -9,6 +10,7 @@ export default function AuthDialog({ open, onClose }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
+  const [remember, setRemember] = useState(false);
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
   const dev = acct.mode === "dev";
@@ -26,7 +28,7 @@ export default function AuthDialog({ open, onClose }) {
     setBusy(true); setMsg(null);
     try {
       if (view === "signIn") {
-        try { await acct.signIn(email, password); }
+        try { await acct.signIn(email, password, remember); }
         catch (err) {
           if (err.code === "UserNotConfirmedException") { await acct.resendCode(email).catch(() => {}); return go("confirm", { text: err.message }); }
           throw err;
@@ -37,14 +39,14 @@ export default function AuthDialog({ open, onClose }) {
         go("confirm", { text: `We sent a code to ${email}.` });
       } else if (view === "confirm") {
         await acct.confirmSignUp(email, code);
-        if (password) { await acct.signIn(email, password); setPassword(""); onClose(); }
+        if (password) { await acct.signIn(email, password, remember); setPassword(""); onClose(); }
         else go("signIn", { text: "Email confirmed. Sign in to continue." });
       } else if (view === "forgot") {
         await acct.forgotPassword(email);
         go("reset", { text: `If there's an account for ${email}, we sent it a code.` });
       } else if (view === "reset") {
         await acct.confirmForgotPassword(email, code, password);
-        await acct.signIn(email, password); setPassword(""); onClose();
+        await acct.signIn(email, password, remember); setPassword(""); onClose();
       }
     } catch (err) {
       setMsg({ text: err.message, err: true });
@@ -87,6 +89,14 @@ export default function AuthDialog({ open, onClose }) {
           </label>
         )}
 
+        {(view === "signIn" || view === "confirm" || view === "reset") && (
+          <label className="check remember">
+            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+            <span>Remember me next time</span>
+          </label>
+        )}
+        {remember && view !== "signUp" && view !== "forgot" && <p className="note">Keeps you signed in on this browser for up to 30 days with a cookie. Leave it off on shared computers.</p>}
+
         {msg && <p className={msg.err ? "msg err" : "msg"} role="status">{msg.text}</p>}
         <button className="btn primary wide" type="submit" disabled={busy}>{busy ? "Working…" : action}</button>
 
@@ -104,6 +114,9 @@ export default function AuthDialog({ open, onClose }) {
           </div>
         )}
       </form>
+      <aside className="auth-showcase">
+        <WorkflowStrip />
+      </aside>
     </dialog>
   );
 }

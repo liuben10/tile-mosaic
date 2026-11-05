@@ -13,7 +13,7 @@ export default function AccountBar({ view, onView, onSignIn }) {
             <button role="tab" aria-selected={view === "library"} className={view === "library" ? "on" : ""} onClick={() => onView("library")}>My library</button>
           </div>
           <span className="who" title={acct.user.email}>{acct.user.email}</span>
-          <button className="btn" type="button" onClick={() => { acct.signOut(); onView("studio"); }}>Sign out</button>
+          <button className="btn" type="button" onClick={() => { acct.signOut(); onView("home"); }}>Sign out</button>
         </>
       ) : (
         <button className="btn primary" type="button" onClick={onSignIn}>Sign in</button>
