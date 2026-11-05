@@ -50,8 +50,12 @@ resource "terraform_data" "restart" {
   # On a brand-new instance the SSM agent may not be registered yet, so this can
   # fail. That's fine: the instance's service retries every 30 seconds until it
   # has pulled and started the image on its own.
+  #
+  # The command has no quoted arguments on purpose: Terraform runs it through
+  # cmd.exe on Windows, which mangles the escaped quotes Go adds. The instance's
+  # run script (pull + replace the container) takes no arguments, so no spaces.
   provisioner "local-exec" {
     on_failure = continue
-    command    = "aws ssm send-command --region ${var.region} --instance-ids ${aws_instance.app.id} --document-name AWS-RunShellScript --comment \"deploy ${var.app_name} ${local.build_tag}\" --parameters \"commands=systemctl restart ${var.app_name}.service\" --query Command.CommandId --output text"
+    command    = "aws ssm send-command --region ${var.region} --instance-ids ${aws_instance.app.id} --document-name AWS-RunShellScript --comment deploy-${var.app_name}-${local.build_tag} --parameters commands=/usr/local/bin/${var.app_name}-run --query Command.CommandId --output text"
   }
 }

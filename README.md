@@ -45,7 +45,10 @@ docker run --rm -p 8080:80 tile-mosaic   # http://localhost:8080
 
 The instance runs the container under systemd and opens port 80 only, with no SSH.
 For a shell, use Session Manager. Needs Terraform 1.5+, the AWS CLI with credentials
-configured, and Docker.
+configured, and Docker. The IAM user running Terraform needs the permissions in
+`infra/deployer-iam-policy.json` (or `AdministratorAccess`). It deploys to
+`us-east-2` by default; change `region` in `terraform.tfvars` if your account
+allows other regions.
 
 ```bash
 terraform -chdir=infra/terraform init
