@@ -26,6 +26,48 @@ npm run preview   # serve dist/ locally to check the build
 To host it, upload the contents of `dist/`. Asset paths are relative, so it also
 works from a sub-path such as a GitHub Pages project site.
 
+## Docker
+
+The `Dockerfile` builds the site with Node and serves `dist/` with nginx on port 80.
+
+```bash
+docker build -t tile-mosaic .
+docker run --rm -p 8080:80 tile-mosaic   # http://localhost:8080
+```
+
+## Deploy to AWS (one EC2 instance)
+
+`infra/terraform/` creates:
+
+- a small VPC with one public subnet
+- an ECR repository for the image
+- a `t3.micro` Amazon Linux 2023 instance with an Elastic IP
+
+The instance runs the container under systemd and opens port 80 only, with no SSH.
+For a shell, use Session Manager. Needs Terraform 1.5+, the AWS CLI with credentials
+configured, and Docker.
+
+```bash
+cd infra/terraform
+terraform init
+terraform apply          # prints the site URL when done
+cd ../..
+scripts/deploy.sh        # build, push to ECR, restart the container on the instance
+```
+
+Run `scripts/deploy.sh` again for every new version. The instance can start before
+the first image exists; it retries every 30 seconds until one is pushed. To get a
+shell on the instance:
+
+```bash
+aws ssm start-session --target "$(terraform -chdir=infra/terraform output -raw instance_id)"
+```
+
+`terraform destroy` removes everything, including the ECR repository and its images.
+
+The site is served over plain HTTP. For HTTPS, put a domain on the Elastic IP and add
+TLS, for example with a load balancer and ACM, or Caddy on the instance.
+
 ## Test tiles
 
 `scripts/scrape_pokemondb_sprites.py` downloads Pokémon sprite PNGs from

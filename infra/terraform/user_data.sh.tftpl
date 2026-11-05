@@ -1,0 +1,41 @@
+#!/bin/bash
+# First-boot setup: install Docker and run the app container as a systemd service.
+set -euxo pipefail
+
+dnf install -y docker
+systemctl enable --now docker
+
+# Pull the latest image and (re)start the container. Deploys re-run this through SSM.
+cat > /usr/local/bin/${app_name}-run <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${registry}
+docker pull ${image}
+docker rm -f ${app_name} 2>/dev/null || true
+docker run -d --name ${app_name} --restart unless-stopped -p 80:80 ${image}
+docker image prune -f
+SCRIPT
+chmod +x /usr/local/bin/${app_name}-run
+
+# Retries every 30 s, so the instance can boot before the first image has been pushed.
+cat > /etc/systemd/system/${app_name}.service <<'UNIT'
+[Unit]
+Description=Pull and run the ${app_name} container
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/${app_name}-run
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now --no-block ${app_name}.service

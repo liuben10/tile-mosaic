@@ -4,3 +4,7 @@ __pycache__/
 *-mosaic.png
 node_modules/
 dist/
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars

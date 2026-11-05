@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars and adjust. Every value has a default, so this file is optional.
+region        = "us-west-2"
+app_name      = "tile-mosaic"
+instance_type = "t3.micro"
+
+# Restrict who can open the site, e.g. just your own IP:
+# allowed_http_cidrs = ["203.0.113.7/32"]

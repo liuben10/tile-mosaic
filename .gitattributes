@@ -1,0 +1,5 @@
+# These run on Linux (bash, cloud-init, nginx, Docker); Windows line endings would break them.
+*.sh       text eol=lf
+*.tftpl    text eol=lf
+Dockerfile text eol=lf
+nginx.conf text eol=lf
