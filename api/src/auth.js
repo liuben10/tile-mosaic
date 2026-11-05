@@ -11,7 +11,7 @@ export class HttpError extends Error {
 }
 
 // Who is calling: { sub, username, email } from a verified Cognito ID token.
-async function identify(header) {
+export async function identify(header) {
   if (!header) return null;
   const [scheme, value] = header.split(" ", 2);
 
@@ -46,7 +46,7 @@ export async function verifyIdToken(token) {
 // sub -> user id, so a busy user doesn't cost a write on every request
 const known = new Map();
 
-async function userId({ sub, username, email }) {
+export async function userId({ sub, username, email }) {
   const hit = known.get(sub);
   if (hit && hit.email === email && hit.username === username && Date.now() - hit.at < 10 * 60_000) return hit.id;
   const { rows } = await query(
@@ -58,11 +58,11 @@ async function userId({ sub, username, email }) {
   return rows[0].id;
 }
 
-// Express middleware: 401 unless signed in; sets req.user = { id, username, email }.
+// Express middleware: 401 unless signed in; sets req.user = { id, sub, username, email }.
 export async function requireUser(req, _res, next) {
   const who = await identify(req.get("authorization"));
   if (!who) throw new HttpError(401, "Sign in to use your library.");
-  req.user = { id: await userId(who), username: who.username, email: who.email };
+  req.user = { id: await userId(who), sub: who.sub, username: who.username, email: who.email };
   next();
 }
 

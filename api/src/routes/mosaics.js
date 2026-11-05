@@ -2,6 +2,7 @@ import { Router } from "express";
 import config from "../config.js";
 import { HttpError } from "../auth.js";
 import { query } from "../db.js";
+import { record } from "../metrics.js";
 import { deleteObjects, downloadUrl, keys, objectSize, uploadUrl } from "../storage.js";
 import { cleanName, isUuid } from "./util.js";
 
@@ -59,7 +60,8 @@ r.post("/:id/complete", async (req, res) => {
   const m = await ownMosaic(req);
   const [png, thumb] = await Promise.all([objectSize(m.s3_key), objectSize(m.thumb_key)]);
   if (png !== Number(m.bytes) || thumb !== m.thumb_bytes) throw new HttpError(409, "The upload hasn't finished.");
-  await query("UPDATE mosaics SET status = 'ready' WHERE id = $1", [m.id]);
+  const done = await query("UPDATE mosaics SET status = 'ready' WHERE id = $1 AND status = 'pending'", [m.id]);
+  if (done.rowCount) record("mosaic_created", req.user.id);
   res.json({ id: m.id, status: "ready" });
 });
 

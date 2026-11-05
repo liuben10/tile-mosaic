@@ -15,7 +15,17 @@ const TAB_KEY = "tile-mosaic.session";
 // wait for the cookie check instead of showing the log-in box and then jumping away.
 const HINT_KEY = "tile-mosaic.remembered";
 const hinted = () => { try { return localStorage.getItem(HINT_KEY) === "1"; } catch { return false; } };
+const VISIT_KEY = "tile-mosaic.visit";      // this tab's visit has been counted
+const VISITOR_KEY = "tile-mosaic.visitor";  // random id for counting unique visitors; not tied to anyone
 const Ctx = createContext(null);
+
+function visitorId() {
+  try {
+    let id = localStorage.getItem(VISITOR_KEY);
+    if (!id) localStorage.setItem(VISITOR_KEY, (id = crypto.randomUUID()));
+    return id;
+  } catch { return crypto.randomUUID(); }
+}
 export const useAccount = () => useContext(Ctx);
 
 function loadTabSession() {
@@ -105,13 +115,45 @@ export function AccountProvider({ children }) {
     return data;
   }, [token, update]);
 
+  // account id and admin flag, fetched once per signed-in user
+  const [profile, setProfile] = useState(null);
+  const who = session?.username ?? null;
+  useEffect(() => {
+    setProfile(null);
+    if (!who) return;
+    let live = true;
+    api("me").then((p) => { if (live) setProfile(p); }, () => {});
+    return () => { live = false; };
+  }, [who, api]);
+
+  // one visit per tab, counted once we know whether someone is signed in
+  const ready = auth !== null && !restoring;
+  useEffect(() => {
+    if (!ready || auth.mode === "off") return;
+    try {
+      if (sessionStorage.getItem(VISIT_KEY)) return;
+      sessionStorage.setItem(VISIT_KEY, "1");
+    } catch { /* storage blocked: count it anyway */ }
+    (async () => {
+      const authz = await token().catch(() => null);
+      fetch("api/visits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(authz ? { Authorization: authz } : {}) },
+        body: JSON.stringify({ visitor: visitorId() }),
+      }).catch(() => {});
+    })();
+  }, [ready, auth, token]);
+
   const value = useMemo(() => ({
-    ready: auth !== null && !restoring,
+    ready,
     // still checking a "Remember me" cookie this browser is known to have
     restoringRemembered: expectRemembered && (auth === null || restoring),
     enabled: !!auth && auth.mode !== "off",
     mode: auth?.mode,
-    user: session ? { username: session.username ?? session.email, email: session.email ?? null } : null,
+    user: session ? {
+      username: session.username ?? session.email, email: session.email ?? null,
+      id: profile?.sub ?? null, isAdmin: !!profile?.isAdmin,
+    } : null,
     api,
     // remember: keep this browser signed in with the API's cookie (up to 30 days)
     // username may also be the account's verified email
@@ -143,7 +185,7 @@ export function AccountProvider({ children }) {
       else if (s && auth?.mode === "cognito") cognito.revoke(auth, s);
       update(null);
     },
-  }), [auth, restoring, expectRemembered, session, api, update]);
+  }), [auth, ready, restoring, expectRemembered, session, profile, api, update]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

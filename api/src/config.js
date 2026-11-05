@@ -32,6 +32,11 @@ const config = {
     clientId: env.COGNITO_CLIENT_ID || null,
   },
 
+  admin: {
+    // Cognito account ids (the "sub", shown on the library page) allowed into the admin panel
+    subs: (env.ADMIN_SUBS || "").split(",").map((s) => s.trim()).filter(Boolean),
+  },
+
   limits: {
     tilesPerSet: 5000,
     tileBytes: 10 * 1024 * 1024,

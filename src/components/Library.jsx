@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAccount } from "../account/AccountContext.jsx";
+import { MetricCard, RangePicker } from "./Charts.jsx";
 
 const fmtDate = (s) => new Date(s).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 const fmtBytes = (n) => (n >= 1 << 20 ? `${(n / (1 << 20)).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
@@ -41,6 +42,7 @@ export default function Library({ onUseTileSet, refreshKey }) {
 
   return (
     <section className="library">
+      <MyStats refreshKey={refreshKey} />
       <div className="lib-head">
         <div className="tabs" role="tablist">
           <button role="tab" aria-selected={tab === "mosaics"} className={tab === "mosaics" ? "on" : ""} onClick={() => setTab("mosaics")}>
@@ -95,6 +97,36 @@ export default function Library({ onUseTileSet, refreshKey }) {
             ))}
           </ul>
       )}
+    </section>
+  );
+}
+
+// The signed-in user's own activity, at the top of their library.
+function MyStats({ refreshKey }) {
+  const { api, user } = useAccount();
+  const [days, setDays] = useState(30);
+  const [stats, setStats] = useState(null);
+  useEffect(() => {
+    let live = true;
+    api(`stats/me?days=${days}`).then((s) => live && setStats(s), () => {});
+    return () => { live = false; };
+  }, [api, days, refreshKey]);
+
+  return (
+    <section className="my-stats" aria-label="Your activity">
+      <div className="lib-head">
+        <h2 className="section-title">Your activity</h2>
+        <RangePicker days={days} onChange={setDays} />
+      </div>
+      {stats && (
+        <div className="metrics compact">
+          <MetricCard title="Tile sets created" total={stats.totals.tileSets} totalLabel="all time" data={stats.series.tileSets} unit="tile sets" height={110} />
+          <MetricCard title="Mosaics created" total={stats.totals.mosaics} totalLabel="all time" data={stats.series.mosaics} unit="mosaics" height={110} />
+          <MetricCard title="Images uploaded" total={stats.totals.images} totalLabel="all time" data={stats.series.images} unit="images" height={110} />
+          <MetricCard title="Visits" total={stats.totals.visits} totalLabel="all time" data={stats.series.visits} unit="visits" height={110} />
+        </div>
+      )}
+      {user?.id && <p className="meta account-id">Your account id: <code>{user.id}</code></p>}
     </section>
   );
 }

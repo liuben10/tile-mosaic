@@ -289,3 +289,38 @@ input[type=color] { width: 38px; height: 32px; padding: 2px; border: 1px solid v
   .builder-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
   .builder-actions .msg, .builder-actions .meta { text-align: left; }
 }
+
+/* Usage metrics: admin panel and "Your activity" in the library */
+.admin { display: flex; flex-direction: column; gap: 16px; padding-block: 4px 40px; }
+.admin-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.admin-head h2 { margin: 0; font: 400 clamp(20px, 2.6vw, 26px)/1.1 var(--f-display); letter-spacing: .03em; }
+.tabs.range button { padding: 8px 10px; font-size: 12px; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 14px; }
+.metrics.compact { grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
+.metric { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px 10px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.metric header { display: flex; flex-direction: column; gap: 2px; }
+.metric h3 { margin: 0; font-size: 13px; font-weight: 500; color: var(--muted); }
+.metric-value { margin: 0; font: 600 30px/1.1 var(--f-body); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.metrics.compact .metric-value { font-size: 24px; }
+.metric-sub { margin: 0; font-size: 12px; color: var(--muted); }
+.metric-sub b { color: var(--ink); font-weight: 600; }
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; overflow: visible; }
+.chart svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+.chart .grid { stroke: var(--line); stroke-width: 1; shape-rendering: crispEdges; }
+.chart .tick { fill: var(--muted); font: 10px var(--f-mono); font-variant-numeric: tabular-nums; }
+.chart .bar { fill: var(--accent); }
+.chart .bar.on { fill: color-mix(in srgb, var(--accent) 70%, var(--panel)); }
+.chart .cursor { stroke: var(--muted); stroke-width: 1; opacity: .5; pointer-events: none; }
+.chart-tip { position: absolute; top: -6px; transform: translate(-50%, -100%); background: var(--ink); color: var(--panel); border-radius: 4px; padding: 6px 8px; font-size: 12px; white-space: nowrap; pointer-events: none; display: flex; gap: 6px; align-items: baseline; box-shadow: 0 4px 14px rgb(0 0 0 / .2); z-index: 2; }
+.chart-tip b { font-size: 14px; font-variant-numeric: tabular-nums; }
+.chart-tip .tip-day { opacity: .75; }
+.metric-table summary { font-size: 12px; color: var(--muted); cursor: pointer; width: max-content; }
+.metric-table table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.metric-table th, .metric-table td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.metric-table td:last-child, .metric-table th:last-child { text-align: right; }
+.metric-table tbody { display: block; max-height: 220px; overflow: auto; }
+.metric-table thead, .metric-table tbody tr { display: table; width: 100%; table-layout: fixed; }
+.my-stats { display: flex; flex-direction: column; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.my-stats .section-title { margin: 0; }
+.account-id code { font: 11px var(--f-mono); user-select: all; overflow-wrap: anywhere; }

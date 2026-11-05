@@ -11,6 +11,7 @@ export default function AccountBar({ view, onView, onSignIn, hideSignIn = false 
           <div className="tabs" role="tablist">
             <button role="tab" aria-selected={view === "studio"} className={view === "studio" ? "on" : ""} onClick={() => onView("studio")}>Studio</button>
             <button role="tab" aria-selected={view === "library"} className={view === "library" ? "on" : ""} onClick={() => onView("library")}>My library</button>
+            {acct.user.isAdmin && <button role="tab" aria-selected={view === "admin"} className={view === "admin" ? "on" : ""} onClick={() => onView("admin")}>Admin</button>}
           </div>
           <span className="who" title={acct.user.email ?? acct.user.username}>{acct.user.username}</span>
           <button className="btn" type="button" onClick={() => { acct.signOut(); onView("home"); }}>Log out</button>

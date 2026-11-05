@@ -8,6 +8,7 @@ import AuthDialog from "./components/AuthDialog.jsx";
 import Library from "./components/Library.jsx";
 import Landing from "./components/Landing.jsx";
 import TileSetBuilder from "./components/TileSetBuilder.jsx";
+import AdminPanel from "./components/AdminPanel.jsx";
 import { useAccount } from "./account/AccountContext.jsx";
 import { loadTileSet, saveMosaic, saveTileSet } from "./account/library.js";
 import { hexToRgb } from "./mosaic/color.js";
@@ -25,7 +26,7 @@ const DEFAULT_SETTINGS = {
 const BUILD_DELAY = 180; // ms to wait after the last change before rebuilding
 
 // Pages, by URL path. nginx and Vite serve index.html for every path, so these work as direct links.
-const PATHS = { home: "/", studio: "/studio", library: "/library" };
+const PATHS = { home: "/", studio: "/studio", library: "/library", admin: "/admin" };
 const viewOf = (path) => Object.keys(PATHS).find((v) => PATHS[v] === (path.replace(/\/+$/, "") || "/")) ?? "home";
 
 function useView() {
@@ -70,7 +71,7 @@ export default function App() {
   useEffect(() => {
     if (!acct.ready) return;
     if (acct.user && view === "home") setView("studio", { replace: true });
-    else if (!acct.user && view === "library") setView("home", { replace: true });
+    else if (!acct.user && (view === "library" || view === "admin")) setView("home", { replace: true });
   }, [acct.ready, acct.user, view, setView]);
   const [authOpen, setAuthOpen] = useState(false);
   const [tileSave, setTileSave] = useState(null); // progress text while saving tiles to the library
@@ -251,6 +252,8 @@ export default function App() {
         <main className="landing" aria-busy="true" />
       ) : view === "home" ? (
         <Landing onStart={() => setView("studio")} onSignedIn={() => setView("studio")} />
+      ) : view === "admin" && acct.user ? (
+        <AdminPanel />
       ) : view === "library" && acct.user ? (
         <main className="wrap">
           <Library onUseTileSet={handleUseTileSet} refreshKey={libraryKey} />

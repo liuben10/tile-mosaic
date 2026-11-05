@@ -69,3 +69,9 @@ variable "db_backup_retention_days" {
   type        = number
   default     = 1
 }
+
+variable "admin_account_ids" {
+  description = "Account ids (Cognito \"sub\") allowed into the admin panel at /admin. Each user's id is shown at the bottom of their library page. Changing this only restarts the API."
+  type        = list(string)
+  default     = []
+}

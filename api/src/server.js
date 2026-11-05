@@ -5,6 +5,7 @@ import { HttpError, publicAuthConfig, requireUser } from "./auth.js";
 import tileSets from "./routes/tileSets.js";
 import mosaics from "./routes/mosaics.js";
 import session from "./session.js";
+import metrics from "./metrics.js";
 
 await connect();
 
@@ -16,9 +17,9 @@ app.use(express.json({ limit: "2mb" })); // a 5000-tile manifest is well under t
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.get("/api/config", (_req, res) => res.json({ auth: publicAuthConfig() }));
 app.use("/api/session", session); // "remember me" cookie; works while signed out
+app.use("/api", metrics);          // visits (signed out too), /me, your stats, admin stats
 
 app.use("/api", requireUser);
-app.get("/api/me", (req, res) => res.json(req.user));
 app.use("/api/tile-sets", tileSets);
 app.use("/api/mosaics", mosaics);
 

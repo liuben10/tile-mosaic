@@ -2,6 +2,7 @@ import { Router } from "express";
 import config from "../config.js";
 import { HttpError } from "../auth.js";
 import { query, tx } from "../db.js";
+import { record } from "../metrics.js";
 import { deleteObjects, downloadUrl, keys, mapLimit, objectSize, uploadUrl } from "../storage.js";
 import { cleanName, isUuid } from "./util.js";
 
@@ -73,6 +74,7 @@ r.post("/", async (req, res) => {
   const uploads = await mapLimit(pending, 32, async (t) => ({
     sha256: t.sha256, url: await uploadUrl(t.s3_key, t.content_type, t.bytes),
   }));
+  record("tile_set_created", userId);
   res.status(201).json({ id: setId, tileCount: list.length, uploads });
 });
 
@@ -83,7 +85,11 @@ r.post("/:id/complete", async (req, res) => {
     `SELECT t.id, t.s3_key, t.bytes FROM tile_set_tiles st JOIN tiles t ON t.id = st.tile_id
      WHERE st.tile_set_id = $1 AND NOT t.uploaded`, [set.id]);
   const arrived = (await mapLimit(rows, 16, async (t) => (await objectSize(t.s3_key)) === t.bytes ? t.id : null)).filter(Boolean);
-  if (arrived.length) await query("UPDATE tiles SET uploaded = true WHERE id = ANY($1::uuid[])", [arrived]);
+  if (arrived.length) {
+    // count only images this call actually marked, so two overlapping calls can't count one twice
+    const marked = await query("UPDATE tiles SET uploaded = true WHERE id = ANY($1::uuid[]) AND NOT uploaded", [arrived]);
+    if (marked.rowCount) record("images_added", req.user.id, marked.rowCount);
+  }
   res.json({ id: set.id, missing: rows.length - arrived.length });
 });
 

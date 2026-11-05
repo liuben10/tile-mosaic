@@ -40,6 +40,24 @@ Staying signed in depends on **Remember me next time** in the sign-in dialog:
 - **Unchecked:** no cookie. The tokens stay in that tab's `sessionStorage`, so closing the
   tab signs you out.
 
+### Usage metrics and the admin panel
+
+The API records tile sets created, mosaics created, images uploaded and visits as
+events (`api/src/metrics.js`), so deleting something doesn't rewrite history. Every user
+sees their own numbers at the top of **My library**; admins also get an **Admin** tab
+(`/admin`) with everyone's totals, unique users and visitors, and daily charts.
+
+Admin access is checked on the server against the account id (Cognito `sub`) on every
+request; anyone else gets a 404. To make yourself an admin: log in, copy **Your account
+id** from the bottom of the activity section in your library, then set it in
+`infra/terraform/terraform.tfvars` and apply (this only restarts the API):
+
+```hcl
+admin_account_ids = ["<your account id>"]
+```
+
+Locally (Docker Compose), log in as `admin`.
+
 Visitors who aren't logged in see the front page at `/`: the log-in box (with **Create
 account**, which also asks for an email and the password twice), then the workflow in three
 panels. Logged-in (or remembered) users go straight to the studio at `/studio`.

@@ -223,6 +223,7 @@ resource "aws_ssm_parameter" "api_env" {
     "DB_SECRET_ARN=${aws_db_instance.db.master_user_secret[0].secret_arn}",
     "DB_SSL=require",
     "DB_CA_FILE=/etc/ssl/rds-global-bundle.pem",
+    "ADMIN_SUBS=${join(",", var.admin_account_ids)}",
   ])
 }
 
