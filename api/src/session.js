@@ -1,6 +1,6 @@
 import { Router } from "express";
 import config from "./config.js";
-import { HttpError, verifyIdToken } from "./auth.js";
+import { HttpError, devUsername, verifyIdToken } from "./auth.js";
 
 // "Remember me next time": the browser hands its Cognito refresh token to the API,
 // which keeps it in an HttpOnly cookie that page scripts can't read. On the next
@@ -47,11 +47,11 @@ async function cognito(action, body) {
   return data;
 }
 
-// refresh token -> { email, idToken, expiresIn }, or null if Cognito no longer accepts it
+// refresh token -> { username, email, idToken, expiresIn }, or null if Cognito no longer accepts it
 async function redeem(refreshToken) {
   if (auth.mode === "dev") {
-    const email = refreshToken.startsWith("dev:") ? refreshToken.slice(4) : "";
-    return /^[^@\s]+@[^@\s]+$/.test(email) ? { email } : null;
+    const username = refreshToken.startsWith("dev:") ? devUsername(refreshToken.slice(4)) : null;
+    return username ? { username, email: null } : null;
   }
   const r = await cognito("InitiateAuth", {
     ClientId: auth.clientId, AuthFlow: "REFRESH_TOKEN_AUTH", AuthParameters: { REFRESH_TOKEN: refreshToken },
@@ -59,14 +59,14 @@ async function redeem(refreshToken) {
   if (!r) return null;
   const who = await verifyIdToken(r.AuthenticationResult.IdToken);
   if (!who) return null;
-  return { email: who.email, idToken: r.AuthenticationResult.IdToken, expiresIn: r.AuthenticationResult.ExpiresIn };
+  return { username: who.username, email: who.email, idToken: r.AuthenticationResult.IdToken, expiresIn: r.AuthenticationResult.ExpiresIn };
 }
 
 const router = Router();
 
-// Remember this browser. Body: { refreshToken } (Cognito) or { email } (local dev mode).
+// Remember this browser. Body: { refreshToken } (Cognito) or { username } (local dev mode).
 router.post("/", async (req, res) => {
-  const token = auth.mode === "dev" ? `dev:${String(req.body?.email || "").trim().toLowerCase()}` : req.body?.refreshToken;
+  const token = auth.mode === "dev" ? `dev:${devUsername(req.body?.username) ?? ""}` : req.body?.refreshToken;
   if (typeof token !== "string" || token.length < 5 || token.length > 3500) throw new HttpError(400, "Missing sign-in token.");
   const session = await redeem(token); // only remember a token Cognito accepts
   if (!session) throw new HttpError(401, "Your sign-in has expired. Sign in again.");

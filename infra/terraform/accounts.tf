@@ -3,13 +3,39 @@
 # PostgreSQL for metadata. The API container on the instance ties them together.
 # ---------------------------------------------------------------------------
 
-# ----- Cognito: email + password accounts -----------------------------------
+# ----- Cognito: username + password accounts, each with a verified email -------
 
-resource "aws_cognito_user_pool" "users" {
-  name                     = var.app_name
-  username_attributes      = ["email"]
+# Accounts sign in with a username (or their verified email, as an alias). Cognito
+# can't switch an existing pool from email-as-username to usernames, so this is a new
+# pool; the first one is only dropped from Terraform (below), never deleted, so no
+# account in it is lost. Delete it by hand in the console once it's no longer needed.
+removed {
+  from = aws_cognito_user_pool.users
+  lifecycle {
+    destroy = false
+  }
+}
+
+resource "aws_cognito_user_pool" "accounts" {
+  name                     = "${var.app_name}-accounts"
+  alias_attributes         = ["email"]
   auto_verified_attributes = ["email"]
   deletion_protection      = var.protect_data ? "ACTIVE" : "INACTIVE"
+
+  username_configuration {
+    case_sensitive = false
+  }
+
+  schema {
+    name                = "email"
+    attribute_data_type = "String"
+    required            = true
+    mutable             = true
+    string_attribute_constraints {
+      min_length = 3
+      max_length = 254
+    }
+  }
 
   password_policy {
     minimum_length                   = 8
@@ -43,7 +69,7 @@ resource "aws_cognito_user_pool" "users" {
 # The browser app signs users in directly against Cognito (no client secret).
 resource "aws_cognito_user_pool_client" "web" {
   name         = "${var.app_name}-web"
-  user_pool_id = aws_cognito_user_pool.users.id
+  user_pool_id = aws_cognito_user_pool.accounts.id
 
   generate_secret               = false
   explicit_auth_flows           = ["ALLOW_USER_PASSWORD_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
@@ -188,7 +214,7 @@ resource "aws_ssm_parameter" "api_env" {
     "NODE_ENV=production",
     "AWS_REGION=${var.region}",
     "AUTH_MODE=cognito",
-    "COGNITO_USER_POOL_ID=${aws_cognito_user_pool.users.id}",
+    "COGNITO_USER_POOL_ID=${aws_cognito_user_pool.accounts.id}",
     "COGNITO_CLIENT_ID=${aws_cognito_user_pool_client.web.id}",
     "S3_BUCKET=${aws_s3_bucket.media.bucket}",
     "DB_HOST=${aws_db_instance.db.address}",

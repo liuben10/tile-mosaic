@@ -47,7 +47,7 @@ output "db_endpoint" {
 }
 
 output "cognito_user_pool_id" {
-  value = aws_cognito_user_pool.users.id
+  value = aws_cognito_user_pool.accounts.id
 }
 
 output "cognito_client_id" {

@@ -30,4 +30,13 @@ app.use((err, req, res, _next) => {
   res.status(status).json({ error: status >= 500 ? "Something went wrong on our side." : err.message });
 });
 
-app.listen(config.port, () => console.log(`tile-mosaic api listening on :${config.port} (auth: ${config.auth.mode})`));
+const server = app.listen(config.port, () => console.log(`tile-mosaic api listening on :${config.port} (auth: ${config.auth.mode})`));
+
+// Node ignores SIGTERM when it runs as PID 1 in a container, so stop cleanly here
+// instead of waiting for Docker to kill the process.
+for (const sig of ["SIGTERM", "SIGINT"]) {
+  process.on(sig, () => {
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 5000).unref();
+  });
+}

@@ -22,9 +22,10 @@ async function call(cfg, action, body) {
 
 function friendly(code, message) {
   switch (code) {
-    case "NotAuthorizedException": return /refresh/i.test(message || "") ? "Your session expired. Sign in again." : "Wrong email or password.";
+    case "NotAuthorizedException": return /refresh/i.test(message || "") ? "Your session expired. Log in again." : "Wrong username or password.";
     case "UserNotConfirmedException": return "Confirm your email first. We sent you a code.";
-    case "UsernameExistsException": return "There's already an account with that email.";
+    case "UsernameExistsException": return "That username is taken. Try another.";
+    case "AliasExistsException": return "There's already an account with that email. Log in instead, or reset its password.";
     case "CodeMismatchException": return "That code isn't right. Check the email and try again.";
     case "ExpiredCodeException": return "That code has expired. Send a new one.";
     case "InvalidPasswordException": return "Use at least 8 characters, with upper and lower case letters and a number.";
@@ -35,37 +36,47 @@ function friendly(code, message) {
   }
 }
 
-const tokensOf = (r, email, refreshToken) => ({
-  email,
+// the claims inside a JWT, unverified (the API verifies every token it's sent)
+function claims(jwt) {
+  try {
+    const b64 = jwt.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))));
+  } catch { return {}; }
+}
+
+const tokensOf = (r, refreshToken) => ({
+  username: claims(r.AuthenticationResult.IdToken)["cognito:username"],
+  email: claims(r.AuthenticationResult.IdToken).email,
   idToken: r.AuthenticationResult.IdToken,
   refreshToken: r.AuthenticationResult.RefreshToken ?? refreshToken,
   expiresAt: Date.now() + (r.AuthenticationResult.ExpiresIn - 60) * 1000,
 });
 
-export const signIn = async (cfg, email, password) =>
+// username can also be the account's verified email (an alias in the user pool)
+export const signIn = async (cfg, username, password) =>
   tokensOf(await call(cfg, "InitiateAuth", {
-    ClientId: cfg.clientId, AuthFlow: "USER_PASSWORD_AUTH", AuthParameters: { USERNAME: email, PASSWORD: password },
-  }), email);
+    ClientId: cfg.clientId, AuthFlow: "USER_PASSWORD_AUTH", AuthParameters: { USERNAME: username, PASSWORD: password },
+  }));
 
 export const refresh = async (cfg, session) =>
   tokensOf(await call(cfg, "InitiateAuth", {
     ClientId: cfg.clientId, AuthFlow: "REFRESH_TOKEN_AUTH", AuthParameters: { REFRESH_TOKEN: session.refreshToken },
-  }), session.email, session.refreshToken);
+  }), session.refreshToken);
 
-export const signUp = (cfg, email, password) =>
-  call(cfg, "SignUp", { ClientId: cfg.clientId, Username: email, Password: password, UserAttributes: [{ Name: "email", Value: email }] });
+export const signUp = (cfg, username, email, password) =>
+  call(cfg, "SignUp", { ClientId: cfg.clientId, Username: username, Password: password, UserAttributes: [{ Name: "email", Value: email }] });
 
-export const confirmSignUp = (cfg, email, code) =>
-  call(cfg, "ConfirmSignUp", { ClientId: cfg.clientId, Username: email, ConfirmationCode: code });
+export const confirmSignUp = (cfg, username, code) =>
+  call(cfg, "ConfirmSignUp", { ClientId: cfg.clientId, Username: username, ConfirmationCode: code });
 
-export const resendCode = (cfg, email) =>
-  call(cfg, "ResendConfirmationCode", { ClientId: cfg.clientId, Username: email });
+export const resendCode = (cfg, username) =>
+  call(cfg, "ResendConfirmationCode", { ClientId: cfg.clientId, Username: username });
 
-export const forgotPassword = (cfg, email) =>
-  call(cfg, "ForgotPassword", { ClientId: cfg.clientId, Username: email });
+export const forgotPassword = (cfg, username) =>
+  call(cfg, "ForgotPassword", { ClientId: cfg.clientId, Username: username });
 
-export const confirmForgotPassword = (cfg, email, code, password) =>
-  call(cfg, "ConfirmForgotPassword", { ClientId: cfg.clientId, Username: email, ConfirmationCode: code, Password: password });
+export const confirmForgotPassword = (cfg, username, code, password) =>
+  call(cfg, "ConfirmForgotPassword", { ClientId: cfg.clientId, Username: username, ConfirmationCode: code, Password: password });
 
 export const revoke = (cfg, session) =>
   call(cfg, "RevokeToken", { ClientId: cfg.clientId, Token: session.refreshToken }).catch(() => {});

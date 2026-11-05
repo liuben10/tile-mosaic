@@ -210,7 +210,7 @@ export default function App() {
           {view === "home" ? (
             <nav className="home-nav">
               {!acct.user && <button className="btn open-studio" type="button" onClick={() => setView("studio")}>Open the studio</button>}
-              <AccountBar view={view} onView={setView} onSignIn={() => setAuthOpen(true)} />
+              <AccountBar view={view} onView={setView} onSignIn={() => setAuthOpen(true)} hideSignIn />
             </nav>
           ) : <>
           <p>Rebuild a picture out of a folder of small images. Every cell of the target is replaced by the tile whose average color is closest. It all runs in your browser; nothing is uploaded unless you save it to your library.</p>
@@ -220,11 +220,11 @@ export default function App() {
       </header>
       <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
 
-      {view === "home" && (!acct.ready || acct.user) ? (
+      {view === "home" && (acct.user || acct.restoringRemembered) ? (
+        // logged in, or checking this browser's "Remember me": the studio is about to open
         <main className="landing" aria-busy="true" />
       ) : view === "home" ? (
-        <Landing onStart={() => setView("studio")} signedIn={!!acct.user} onLibrary={() => setView("library")}
-          onSignIn={acct.enabled ? () => setAuthOpen(true) : null} />
+        <Landing onStart={() => setView("studio")} onSignedIn={() => setView("studio")} />
       ) : view === "library" && acct.user ? (
         <main className="wrap">
           <Library onUseTileSet={handleUseTileSet} refreshKey={libraryKey} />

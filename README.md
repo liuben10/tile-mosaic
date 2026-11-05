@@ -21,7 +21,7 @@ the sign-in button is hidden.
 
 | What | Where |
 | --- | --- |
-| Sign-up, sign-in, email codes, password reset | Amazon Cognito user pool (the browser talks to Cognito directly) |
+| Sign-up, log-in, email codes, password reset | Amazon Cognito user pool (the browser talks to Cognito directly). Accounts have a username and a verified email; either one logs in. |
 | Tile images and mosaic PNGs | Private S3 bucket, under `u/<user id>/` |
 | Users, tile sets, mosaics (metadata) | RDS PostgreSQL |
 
@@ -40,8 +40,9 @@ Staying signed in depends on **Remember me next time** in the sign-in dialog:
 - **Unchecked:** no cookie. The tokens stay in that tab's `sessionStorage`, so closing the
   tab signs you out.
 
-Visitors who aren't signed in see the front page at `/`; signed-in (or remembered) users go
-straight to the studio at `/studio`.
+Visitors who aren't logged in see the front page at `/`: the log-in box (with **Create
+account**, which also asks for an email and the password twice), then the workflow in three
+panels. Logged-in (or remembered) users go straight to the studio at `/studio`.
 The API applies `api/migrations/*.sql` on startup.
 
 ## Run locally

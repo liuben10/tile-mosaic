@@ -11,6 +11,10 @@ import * as cognito from "./cognito.js";
 //    reload keeps you signed in but closing the tab signs you out.
 
 const TAB_KEY = "tile-mosaic.session";
+// Not a credential: just "this browser chose Remember me", so the front page knows to
+// wait for the cookie check instead of showing the log-in box and then jumping away.
+const HINT_KEY = "tile-mosaic.remembered";
+const hinted = () => { try { return localStorage.getItem(HINT_KEY) === "1"; } catch { return false; } };
 const Ctx = createContext(null);
 export const useAccount = () => useContext(Ctx);
 
@@ -21,7 +25,9 @@ function storeSession(s) {
   try {
     if (s && !s.remembered) sessionStorage.setItem(TAB_KEY, JSON.stringify(s));
     else sessionStorage.removeItem(TAB_KEY);
-    localStorage.removeItem(TAB_KEY); // earlier versions kept it here, with no way to opt out
+    if (s?.remembered) localStorage.setItem(HINT_KEY, "1");
+    else localStorage.removeItem(HINT_KEY);
+    localStorage.removeItem(TAB_KEY); // earlier versions kept the whole session here
   } catch { /* storage blocked */ }
 }
 
@@ -38,7 +44,7 @@ async function sessionCall(path, method, body) {
   return data;
 }
 const remembered = (r) => ({
-  email: r.email, remembered: true,
+  username: r.username, email: r.email ?? null, remembered: true,
   idToken: r.idToken ?? null, expiresAt: r.expiresIn ? Date.now() + (r.expiresIn - 60) * 1000 : Infinity,
 });
 
@@ -50,19 +56,22 @@ export function AccountProvider({ children }) {
   const [auth, setAuth] = useState(null);          // { mode: "cognito" | "dev" | "off", ... }
   const [session, setSession] = useState(loadTabSession);
   const [restoring, setRestoring] = useState(true); // checking for a remembered sign-in
+  const [expectRemembered] = useState(hinted);
   const sessionRef = useRef(session);
   const refreshing = useRef(null);
 
   const update = useCallback((s) => { sessionRef.current = s; storeSession(s); setSession(s); }, []);
 
   useEffect(() => {
-    fetch("api/config")
+    fetch("api/config", { signal: AbortSignal.timeout(6000) })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then(async (c) => {
         setAuth(c.auth);
         // signed in in this tab already, else try the "remember me" cookie
         if (!sessionRef.current && c.auth.mode !== "off") {
-          await sessionCall("/refresh", "POST").then((r) => update(remembered(r)), () => {});
+          await sessionCall("/refresh", "POST").then((r) => update(remembered(r)), (e) => {
+            if (e.status === 401) update(null); // nothing remembered any more: drop the hint
+          });
         }
       })
       .catch(() => setAuth({ mode: "off" }))
@@ -73,7 +82,7 @@ export function AccountProvider({ children }) {
   const token = useCallback(async () => {
     const s = sessionRef.current;
     if (!s) return null;
-    if (auth?.mode === "dev") return `Dev ${s.email}`;
+    if (auth?.mode === "dev") return `Dev ${s.username}`;
     if (Date.now() < s.expiresAt) return `Bearer ${s.idToken}`;
     refreshing.current ??= (s.remembered ? sessionCall("/refresh", "POST").then(remembered) : cognito.refresh(auth, s))
       .then((n) => { update(n); return n; })
@@ -98,34 +107,43 @@ export function AccountProvider({ children }) {
 
   const value = useMemo(() => ({
     ready: auth !== null && !restoring,
+    // still checking a "Remember me" cookie this browser is known to have
+    restoringRemembered: expectRemembered && (auth === null || restoring),
     enabled: !!auth && auth.mode !== "off",
     mode: auth?.mode,
-    user: session ? { email: session.email } : null,
+    user: session ? { username: session.username ?? session.email, email: session.email ?? null } : null,
     api,
     // remember: keep this browser signed in with the API's cookie (up to 30 days)
-    signIn: async (email, password, remember = false) => {
-      email = email.trim().toLowerCase();
+    // username may also be the account's verified email
+    signIn: async (username, password, remember = false) => {
+      username = username.trim();
       if (auth.mode === "dev") {
-        if (remember) await sessionCall("", "POST", { email });
-        return update({ email, remembered: remember });
+        username = username.toLowerCase();
+        if (remember) await sessionCall("", "POST", { username });
+        return update({ username, email: null, remembered: remember });
       }
-      const tokens = await cognito.signIn(auth, email, password);
+      const tokens = await cognito.signIn(auth, username, password);
       if (!remember) return update(tokens);
       // hand the refresh token to the API's cookie and keep only the ID token here
       update(remembered(await sessionCall("", "POST", { refreshToken: tokens.refreshToken })));
     },
-    signUp: (email, password) => cognito.signUp(auth, email.trim().toLowerCase(), password),
-    confirmSignUp: (email, code) => cognito.confirmSignUp(auth, email.trim().toLowerCase(), code.trim()),
-    resendCode: (email) => cognito.resendCode(auth, email.trim().toLowerCase()),
-    forgotPassword: (email) => cognito.forgotPassword(auth, email.trim().toLowerCase()),
-    confirmForgotPassword: (email, code, pw) => cognito.confirmForgotPassword(auth, email.trim().toLowerCase(), code.trim(), pw),
+    // returns { confirmed: true } when no emailed code is needed (local dev mode)
+    signUp: async (username, email, password) => {
+      if (auth.mode === "dev") return { confirmed: true };
+      await cognito.signUp(auth, username.trim(), email.trim().toLowerCase(), password);
+      return { confirmed: false };
+    },
+    confirmSignUp: (username, code) => cognito.confirmSignUp(auth, username.trim(), code.trim()),
+    resendCode: (username) => cognito.resendCode(auth, username.trim()),
+    forgotPassword: (username) => cognito.forgotPassword(auth, username.trim()),
+    confirmForgotPassword: (username, code, pw) => cognito.confirmForgotPassword(auth, username.trim(), code.trim(), pw),
     signOut: () => {
       const s = sessionRef.current;
       if (s?.remembered) sessionCall("", "DELETE").catch(() => {}); // clears the cookie and revokes the token
       else if (s && auth?.mode === "cognito") cognito.revoke(auth, s);
       update(null);
     },
-  }), [auth, restoring, session, api, update]);
+  }), [auth, restoring, expectRemembered, session, api, update]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
