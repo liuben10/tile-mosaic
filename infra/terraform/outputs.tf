@@ -25,3 +25,8 @@ output "region" {
 output "app_name" {
   value = var.app_name
 }
+
+output "image" {
+  description = "The image tag built from the current source (only when build_image is true)."
+  value       = var.build_image ? "${aws_ecr_repository.app.repository_url}:${local.build_tag}" : null
+}

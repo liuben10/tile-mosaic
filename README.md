@@ -48,16 +48,20 @@ For a shell, use Session Manager. Needs Terraform 1.5+, the AWS CLI with credent
 configured, and Docker.
 
 ```bash
-cd infra/terraform
-terraform init
-terraform apply          # prints the site URL when done
-cd ../..
-scripts/deploy.sh        # build, push to ECR, restart the container on the instance
+terraform -chdir=infra/terraform init
+terraform -chdir=infra/terraform apply   # creates everything, builds and deploys the app, prints the URL
 ```
 
-Run `scripts/deploy.sh` again for every new version. The instance can start before
-the first image exists; it retries every 30 seconds until one is pushed. To get a
-shell on the instance:
+`terraform apply` does the whole deploy: it builds the image with your local Docker,
+pushes it to ECR and restarts the container on the instance. It hashes the app's
+source files, so later applies rebuild only when something in `src/`, `index.html`,
+the Dockerfile or the package files changed. Run `terraform apply` again for every
+new version. On the first apply the instance may need a minute or two after
+Terraform finishes; it retries every 30 seconds until it has pulled the image.
+
+To manage images some other way, set `build_image = false` in `terraform.tfvars`.
+`scripts/deploy.sh` still works on its own: it builds, pushes and restarts without
+touching Terraform state. To get a shell on the instance:
 
 ```bash
 aws ssm start-session --target "$(terraform -chdir=infra/terraform output -raw instance_id)"

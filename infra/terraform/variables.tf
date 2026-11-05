@@ -33,3 +33,9 @@ variable "allowed_http_cidrs" {
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }
+
+variable "build_image" {
+  description = "Build the app image with local Docker, push it to ECR and restart the container during `terraform apply`. Needs Docker and the AWS CLI on the machine running Terraform."
+  type        = bool
+  default     = true
+}
