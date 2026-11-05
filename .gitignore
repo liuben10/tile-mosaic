@@ -2,3 +2,5 @@ test-tiles/
 __pycache__/
 *.part
 *-mosaic.png
+node_modules/
+dist/

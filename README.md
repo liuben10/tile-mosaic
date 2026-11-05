@@ -3,17 +3,28 @@
 Rebuild a target image out of a folder of small images. Each cell of the target is
 replaced by the tile whose average color is closest (CIELAB or plain RGB distance).
 
-Everything runs in the browser. `index.html` is the whole app, with no build step
-and no server-side code, so any static host works (GitHub Pages, Netlify,
-Cloudflare Pages, S3, `python -m http.server`).
+Everything runs in the browser. It's a React app built with Vite; the build is a
+static `dist/` folder with no server-side code, so any static host works
+(GitHub Pages, Netlify, Cloudflare Pages, S3).
+
+- `src/App.jsx`: app state and the rebuild-on-change loop
+- `src/components/`: the Tiles, Target image and Settings panels, and the zoomable viewer
+- `src/mosaic/`: plain JS with no React: tile trimming, color matching, rendering, sample data
+- `src/styles.css`: layout, colors and light/dark themes
 
 ## Run locally
 
+Needs Node 18+.
+
 ```bash
-python -m http.server 8000
+npm install
+npm run dev       # dev server with hot reload, at http://localhost:5173
+npm run build     # production build into dist/
+npm run preview   # serve dist/ locally to check the build
 ```
 
-Then open http://localhost:8000.
+To host it, upload the contents of `dist/`. Asset paths are relative, so it also
+works from a sub-path such as a GitHub Pages project site.
 
 ## Test tiles
 
